@@ -54,7 +54,7 @@ const ready = (p) => p.waitForFunction(() => window.__acikOfis && window.__acikO
 const money = (p) => p.evaluate(() => window.__acikOfis.ctrl.state.money);
 async function holdReset(p) {
   await p.click('[data-test=menu]'); await p.click('[data-test=menu-reset]');
-  const lists = await p.evaluate(() => ({ del: document.querySelectorAll('[data-test=reset-delete] li').length, keep: [...document.querySelectorAll('[data-test=reset-keep] li')].map((l) => l.dataset.key) }));
+  const lists = await p.evaluate(() => ({ del: [...document.querySelectorAll('[data-test=reset-delete] li')].map((l) => l.textContent), keep: [...document.querySelectorAll('[data-test=reset-keep] li')].map((l) => l.textContent), backup: (document.querySelector('[data-test=reset-backup]') || {}).textContent || '', title: document.querySelector('.modal h2').textContent, cancel: document.querySelector('[data-test=reset-cancel]').textContent, hold: document.querySelector('[data-test=reset-hold]').textContent }));
   const b = await p.locator('[data-test=reset-hold]').boundingBox();
   await p.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await p.mouse.down(); await p.waitForTimeout(700); await p.mouse.up();
   const early = await p.isVisible('[data-test=reset-hold]');
@@ -89,7 +89,8 @@ for (const signedIn of [false, true]) {
 
   const m0 = await money(p);
   const { lists, early } = await holdReset(p);
-  check(tag + ': dialog lists (delete ' + lists.del + ', keep ' + lists.keep.join(',') + ')', lists.del >= 5 && (signedIn ? lists.keep.includes('reset.keep.account') : lists.keep.length >= 1));
+  check(tag + ': dialog = Yazı copy, fixed lists (4 go, 3 stay)', lists.title === 'Baştan başlamak istiyor musun?' && lists.del.length === 4 && lists.del[0] === 'Kasa ve kazanç' && lists.keep.length === 3 && lists.keep[2] === 'Kodhane hesabın' && lists.cancel === 'Vazgeç' && lists.hold === 'Baştan başlamak için basılı tut', JSON.stringify(lists));
+  check(tag + ': backup line ' + (signedIn ? 'shown with 30 days' : 'hidden for guests'), signedIn ? lists.backup === 'Eski kaydın 30 gün saklanır, bu sürede geri yükleyebilirsin.' : lists.backup === '', lists.backup);
   check(tag + ': short press does not reset', early);
   const m1 = await money(p);
   check(tag + ': reset applied', m1 < m0, m0 + ' → ' + m1);

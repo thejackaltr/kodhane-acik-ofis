@@ -10,10 +10,9 @@ import * as SY from '../../src/logic/sync.js';
 import * as I from '../../src/logic/i18n.js';
 import { Controller } from '../../src/game.js';
 import { createSaveApi, MockSaveServer, classify, ERR_STALE, ERR_BACKUP_NOT_FOUND, UNDO_MS, resolveMode, MOCK_KEY } from '../../src/cloud/resetApi.js';
-import { ResetFlow, UNDO_KEY } from '../../src/cloud/resetFlow.js';
+import { ResetFlow, UNDO_KEY, staleKind } from '../../src/cloud/resetFlow.js';
 import { CloudClient, CloudSync, RPC } from '../../src/cloud/cloud.js';
 import { HoldGesture, HOLD_MS } from '../../src/ui/hold.js';
-import { resetLists } from '../../src/logic/resetInfo.js';
 import { ajansSave } from '../smoke/grown.mjs';
 
 const T0 = Date.UTC(2026, 8, 28, 13, 0, 0);
@@ -340,20 +339,24 @@ test('a stale tab that tries to reset loads the current save instead (no second 
 });
 
 // ------------------------------------------------------------------ confirm dialog + hold button
-test('confirm lists come from the save: office/money/staff/items/upgrades/stats go; account + leaderboard stay (signed in)', () => {
-  const s = ajansSave(T0);
-  const g = resetLists(s, { signedIn: false, languages: 1 });
-  assert.deepEqual(g.remove.map((x) => x.key), ['reset.del.office', 'reset.del.money', 'reset.del.staff', 'reset.del.items', 'reset.del.upgrades', 'reset.del.projects', 'reset.del.stats']);
-  assert.deepEqual(g.keep.map((x) => x.key), ['reset.keep.nothing']);
-  assert.equal(g.remove.find((x) => x.key === 'reset.del.staff').vars.n, s.staff.length - 1);
-  const signed = resetLists(s, { signedIn: true, email: 'a@b.c', languages: 2 });
-  assert.deepEqual(signed.keep.map((x) => x.key), ['reset.keep.account', 'reset.keep.leaderboard', 'reset.keep.backup', 'reset.keep.language']);
-  const fresh = resetLists(E.newState(T0), {});
-  assert.deepEqual(fresh.remove.map((x) => x.key), ['reset.del.office', 'reset.del.money', 'reset.del.stats'], 'empty parts are not listed');
-  for (const it of [...g.remove, ...signed.keep, ...g.keep]) assert.equal(typeof I.raw(it.key), 'string', it.key);
-  for (const k of ['reset.deleteTitle', 'reset.keepTitle', 'reset.undo', 'reset.otherDevice', 'reset.holdHint', 'reset.done', 'reset.restored', 'reset.failed', 'reset.undoExpired'])
-    assert.equal(typeof I.raw(k), 'string', k);
-  assert.equal(I.t('reset.deleteTitle'), 'Silinecekler'); assert.equal(I.t('reset.keepTitle'), 'Kalacaklar'); assert.equal(I.t('reset.undo'), 'Geri al');
+test('confirm dialog copy: Yazı\'s fixed lists (no achievements in Açık Ofis), backup line with {d}, countdown kept but unused', () => {
+  assert.deepEqual(I.list('reset.lost'), ['Kasa ve kazanç', 'Ekip ve masalar', 'Eşyalar ve geliştirmeler', 'Aşama ilerlemen']);
+  assert.deepEqual(I.list('reset.kept'), ['Tüm Zamanlar puanın ve sıran', 'Takma adın', 'Kodhane hesabın']);
+  assert.equal(I.t('reset.backup', { d: 30 }), 'Eski kaydın 30 gün saklanır, bu sürede geri yükleyebilirsin.');
+  assert.equal(I.t('reset.restoreAsk', { t: '28 Eyl 2026 16:02' }), '28 Eyl 2026 16:02 tarihli bir yedeğin var. Geri yüklersen şimdiki ilerlemen silinir.');
+  for (const k of ['title', 'body', 'lostTitle', 'keptTitle', 'hold', 'countdown', 'cancel', 'done', 'undo', 'restored', 'restoreYes', 'otherDevice', 'otherDeviceSync', 'undoExpired', 'failed'])
+    assert.equal(typeof I.raw('reset.' + k), 'string', k);
+  for (const k of ['holdHint', 'deleteTitle', 'keepTitle', 'del', 'keep']) assert.equal(I.raw('reset.' + k), undefined, 'replaced placeholder removed: ' + k);
+  const ui = fs.readFileSync(new URL('../../src/ui/ui.js', import.meta.url), 'utf8');
+  assert.equal(ui.includes("'reset.countdown'"), false, 'countdown is not rendered');
+  assert.equal(new CloudClient({}).cfg.backupRetentionDays, 30);
+});
+test('otherDevice split: a later game start (reset) vs the same game played elsewhere (sync)', () => {
+  const mine = { startedAt: T0 };
+  assert.equal(staleKind(mine, null), 'reset'); assert.equal(staleKind(mine, {}), 'reset');
+  assert.equal(staleKind(mine, { startedAt: T0 + 60000, totalEarned: 0 }), 'reset');
+  assert.equal(staleKind(mine, { startedAt: T0, totalEarned: 9 }), 'sync');
+  assert.equal(staleKind(mine, { startedAt: T0 - 9e6 }), 'sync', 'older backup restored elsewhere');
 });
 test('hold gesture: 2 s press confirms once, early release cancels and resets the fill', () => {
   assert.equal(HOLD_MS, 2000);

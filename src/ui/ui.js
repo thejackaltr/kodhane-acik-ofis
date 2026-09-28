@@ -1,6 +1,6 @@
 // DOM overlay UI: HUD, bottom nav + sheets, hints, modals (event cards, welcome back, info, menu, share, cloud).
 import { h, clear, add } from './dom.js';
-import { t, tp, raw, item, upper, available, locale } from '../logic/i18n.js';
+import { t, tp, raw, item, list, upper, available, locale } from '../logic/i18n.js';
 import { tl, fmt, fmtDuration } from '../logic/format.js';
 import * as E from '../logic/economy.js';
 import { STAFF, STAFF_ORDER, STAGES, FUTURE_STAGES, UPGRADES, UPGRADE_ORDER, CFG, ITEMS, ITEM_ORDER, EVENTS } from '../logic/config.js';
@@ -8,7 +8,6 @@ import { hasRack } from '../logic/events.js';
 import * as G from '../logic/grid.js';
 import { openShare } from './share.js';
 import { holdButton } from './hold.js';
-import { resetLists } from '../logic/resetInfo.js';
 
 const NAV = [['offers', '📋'], ['team', '👥'], ['office', '🏢'], ['share', '📸']];
 const pct = (x) => Math.round(x * 100);
@@ -360,22 +359,18 @@ export class UI {
         h('button', { class: 'btn ghost', onclick: close }, t('menu.close')));
     });
   }
-  // v2.2: two columns (what goes / what stays, from the real save) + 2 s press-and-hold confirm
+  // v2.2: Yazı's fixed lists (what goes / what stays) + 2 s press-and-hold confirm. The backup line only for signed-in
+  // players ({d} = backup retention days from the cloud config). reset.countdown exists in tr.json but is not used.
   confirmReset() {
     const ctx = this.opts.resetContext ? this.opts.resetContext() : {};
-    const lists = resetLists(this.ctrl.state, Object.assign({ languages: available().length }, ctx));
-    const val = (v) => (v && typeof v === 'object' ? (v.t ? t(v.t) : tl(v.tl)) : v);
-    const line = (it) => { const vars = {}; for (const [k, v] of Object.entries(it.vars || {})) vars[k] = val(v); return h('li', { 'data-key': it.key, text: t(it.key, vars) }); };
+    const col = (cls, test, title, items) => h('section', { class: 'reset-col ' + cls, 'data-test': test }, h('h3', { text: t(title) }), h('ul', null, items.map((x) => h('li', { text: x }))));
     this.showModal((box, close) => {
-      const hint = h('p', { class: 'dim hold-hint', id: 'reset-hold-hint', text: t('reset.holdHint') });
-      const btn = holdButton({ label: t('menu.resetYes'), hint: t('reset.holdHint'), test: 'reset-hold', onConfirm: () => { close(); this.opts.onReset && this.opts.onReset(); } });
-      btn.setAttribute('aria-describedby', 'reset-hold-hint');
-      add(box, h('h2', { text: t('menu.reset') }), h('p', { text: t('menu.resetConfirm') }),
-        h('div', { class: 'reset-cols' },
-          h('section', { class: 'reset-col del', 'data-test': 'reset-delete' }, h('h3', { text: t('reset.deleteTitle') }), h('ul', null, lists.remove.map(line))),
-          h('section', { class: 'reset-col keep', 'data-test': 'reset-keep' }, h('h3', { text: t('reset.keepTitle') }), h('ul', null, lists.keep.map(line)))),
-        hint, btn,
-        h('button', { class: 'btn ghost', autofocus: true, onclick: close }, t('menu.close')));
+      const btn = holdButton({ label: t('reset.hold'), test: 'reset-hold', onConfirm: () => { close(); this.opts.onReset && this.opts.onReset(); } });
+      add(box, h('h2', { text: t('reset.title') }), h('p', { text: t('reset.body') }),
+        h('div', { class: 'reset-cols' }, col('del', 'reset-delete', 'reset.lostTitle', list('reset.lost')), col('keep', 'reset-keep', 'reset.keptTitle', list('reset.kept'))),
+        ctx.signedIn ? h('p', { class: 'note', 'data-test': 'reset-backup', text: t('reset.backup', { d: ctx.backupDays }) }) : null,
+        btn,
+        h('button', { class: 'btn ghost', autofocus: true, 'data-test': 'reset-cancel', onclick: close }, t('reset.cancel')));
     }, { cls: 'reset' });
   }
   // v2.2: "Geri al" toast for the undo window (a shrinking bar, no numbers)

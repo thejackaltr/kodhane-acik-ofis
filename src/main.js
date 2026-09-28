@@ -38,7 +38,7 @@ const resetFlow = new ResetFlow(ctrl, resetApi, { storage, beforeReset: () => cl
   undoShown: (p) => ui.showUndo(p, () => resetFlow.undo()),
   undoGone: () => ui.hideUndo(),
   restored: () => ui.toast(t('reset.restored'), 'ok'),
-  otherDevice: () => { ui.hideUndo(); ui.toast(t('reset.otherDevice'), '', 6000); },
+  otherDevice: (kind) => { ui.hideUndo(); ui.toast(t(kind === 'reset' ? 'reset.otherDevice' : 'reset.otherDeviceSync'), '', 6000); },
   failed: (key) => ui.toast(t(key), '', 4000)
 } });
 // 409 on a push: load the server copy; it is the cloud copy, so do not push it straight back
@@ -70,7 +70,7 @@ const ui = new UI(document.getElementById('ui'), ctrl, {
   fit: () => scene && scene.fitView(),
   snapshot: (cb) => snapshot(cb),
   onReset: () => resetFlow.reset(),
-  resetContext: () => ({ signedIn: cloud.signedIn(), email: cloud.client.user ? cloud.client.user.email : '' }),
+  resetContext: () => ({ signedIn: cloud.signedIn(), backupDays: cloud.client.cfg.backupRetentionDays }),
   changeLocale
 });
 

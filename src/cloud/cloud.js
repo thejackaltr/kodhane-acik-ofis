@@ -27,6 +27,7 @@ const DEFAULTS = {
   lbRpc: 'kodhane_leaderboard',                 // shared with Kodhane; p_game keeps the lists apart
   lbGame: 'acik_ofis',
   profileTable: 'kodhane_profiles',             // one nickname per account, shared with Kodhane
+  backupRetentionDays: 30,                      // v2.2: = game_config backup_retention_days (Backend migration default 30); reset.backup {d}
   pushDelayMs: 30000,
   timeoutMs: 15000
 };

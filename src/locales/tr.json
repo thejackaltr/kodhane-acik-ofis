@@ -369,8 +369,6 @@
     "cloud": "Bulut kaydı",
     "credits": "Hakkında",
     "reset": "Baştan başla",
-    "resetConfirm": "Emin misin? Ofis, ekip ve kasa sıfırlanır.",
-    "resetYes": "Evet, baştan başla",
     "close": "Kapat",
     "install": "Uygulama olarak yükle",
     "installIos": "iPhone'da: Paylaş ▸ Ana Ekrana Ekle",
@@ -484,31 +482,34 @@
     "s4": "Kodhane: Açık Ofis. Tarayıcıda ve telefonda oyna."
   },
   "reset": {
-    "_gecici": "GEÇİCİ METİN: bu bölümdeki tüm reset.* metinleri, place.moveDesk ve toast.deskMoved Yazı'nın onayını bekliyor (v2.2).",
-    "holdHint": "Onaylamak için düğmeyi basılı tut.",
-    "deleteTitle": "Silinecekler",
-    "keepTitle": "Kalacaklar",
-    "del": {
-      "office": "Ofis: {stage}, {n} masa",
-      "money": "Kasa: {v}",
-      "staff": "Ekip: {n} çalışan",
-      "items": "Eşyalar: {n} adet",
-      "upgrades": "Geliştirmeler: {n} adet",
-      "projects": "Süren projeler ve teklifler",
-      "stats": "İstatistikler: {p} proje, {k} kedi uykusu, toplam {v}"
-    },
-    "keep": {
-      "account": "Bulut hesabın ({email})",
-      "leaderboard": "Sıralamadaki puanın ve takma adın",
-      "backup": "Buluttaki eski ofisinin 30 günlük yedeği",
-      "language": "Dil seçimin",
-      "nothing": "Hiçbir şey. Ofis ilk günkü gibi baştan başlar."
-    },
+    "_gecici": "GEÇİCİ METİN: reset.undoExpired, reset.failed, reset.otherDeviceSync, place.moveDesk ve toast.deskMoved Yazı'nın onayını bekliyor (v2.2). Diğer reset.* metinleri Yazı'nındır.",
+    "title": "Baştan başlamak istiyor musun?",
+    "body": "Ofisin sıfırdan başlar. Bu cihazdaki ve buluttaki kaydın değişir.",
+    "lostTitle": "Silinecekler",
+    "lost": [
+      "Kasa ve kazanç",
+      "Ekip ve masalar",
+      "Eşyalar ve geliştirmeler",
+      "Aşama ilerlemen"
+    ],
+    "keptTitle": "Kalacaklar",
+    "kept": [
+      "Tüm Zamanlar puanın ve sıran",
+      "Takma adın",
+      "Kodhane hesabın"
+    ],
+    "backup": "Eski kaydın {d} gün saklanır, bu sürede geri yükleyebilirsin.",
+    "hold": "Baştan başlamak için basılı tut",
+    "countdown": "Baştan başla ({s})",
+    "cancel": "Vazgeç",
     "done": "Ofis sıfırlandı.",
     "undo": "Geri al",
-    "restored": "Ofisin geri geldi.",
+    "restored": "Eski ofisin geri yüklendi.",
+    "restoreAsk": "{t} tarihli bir yedeğin var. Geri yüklersen şimdiki ilerlemen silinir.",
+    "restoreYes": "Yedeği geri yükle",
+    "otherDevice": "Kaydın başka bir cihazda sıfırlandı. Güncel kayıt yüklendi.",
+    "otherDeviceSync": "Oyuna başka bir cihazda ya da sekmede devam edildi. Güncel kayıt yüklendi.",
     "undoExpired": "Geri alma süresi doldu.",
-    "otherDevice": "Oyun başka bir cihazda ya da sekmede sıfırlandı. Güncel kayıt yüklendi.",
     "failed": "Şu an sıfırlanamadı. Bağlantını kontrol edip tekrar dene."
   }
 }

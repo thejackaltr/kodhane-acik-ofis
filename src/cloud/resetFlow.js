@@ -2,7 +2,7 @@
 // (snapshot kept in memory + localStorage backup), stale-write handling (409 PT409 or a newer revision in another tab:
 // load the current save, show reset.otherDevice, never overwrite it).
 // state.revision = the last server revision this client has seen (guests: a local counter bumped by resets).
-// opts.ui hooks (all optional): { undoShown(pending), undoGone(), restored(), otherDevice(), failed(key) }
+// opts.ui hooks (all optional): { undoShown(pending), undoGone(), restored(), otherDevice(kind: 'reset'|'sync'), failed(key) }
 // opts.beforeReset(): e.g. cancel a pending cloud push; opts.pushNow(): write the restored save at once (real server).
 import { UNDO_MS, isStale, isBackupNotFound } from './resetApi.js';
 
@@ -10,6 +10,15 @@ export const UNDO_KEY = 'acik_ofis_reset_undo_v1';
 const clone = (x) => JSON.parse(JSON.stringify(x));
 // content signature without the clock fields (same idea as CloudSync.sig)
 export function sig(s) { const c = Object.assign({}, s); delete c.lastSaved; delete c.lastTick; delete c.revision; try { return JSON.stringify(c); } catch (e) { return String(Math.random()); } }
+
+// v2.2: why was our write stale? The 409 itself cannot tell (a v2.2 client always gets stale_revision), so look at
+// what we loaded: a later game start (reset payload / newState after a reset: new startedAt) or an empty payload =
+// 'reset' (reset.otherDevice); the same game played on elsewhere, or an older backup restored = 'sync' (reset.otherDeviceSync).
+export function staleKind(mine, data) {
+  if (!data || typeof data !== 'object' || !Object.keys(data).length) return 'reset';
+  const a = +data.startedAt || 0, b = +(mine && mine.startedAt) || 0;
+  return a > b + 1000 ? 'reset' : 'sync';
+}
 
 export class ResetFlow {
   constructor(ctrl, api, opts = {}) {
@@ -119,10 +128,11 @@ export class ResetFlow {
         let cur = current;
         if (!cur) { try { cur = await this.api.readSave(); } catch (e) { cur = null; } }
         if (!cur || (cur.revision || 0) <= this.rev()) return false;
+        const kind = staleKind(this.ctrl.state, cur.data);
         this.drop(true);
         this.ctrl.adoptRemote(cur.data, cur.revision, this.now());
         this.mirrorSig = sig(this.ctrl.state);             // what we just loaded is the server copy: nothing to write back
-        this.hook('otherDevice');
+        this.hook('otherDevice', kind);
         return true;
       } finally { this.adopting = null; }
     })();
