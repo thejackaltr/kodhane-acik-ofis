@@ -7,6 +7,8 @@ import { STAFF, STAFF_ORDER, STAGES, FUTURE_STAGES, UPGRADES, UPGRADE_ORDER, CFG
 import { hasRack } from '../logic/events.js';
 import * as G from '../logic/grid.js';
 import { openShare } from './share.js';
+import { holdButton } from './hold.js';
+import { resetLists } from '../logic/resetInfo.js';
 
 const NAV = [['offers', '📋'], ['team', '👥'], ['office', '🏢'], ['share', '📸']];
 const pct = (x) => Math.round(x * 100);
@@ -30,6 +32,7 @@ export class UI {
     ctrl.on('hired', (r) => { this.toast(t('toast.hired', { name: t('staff.' + r.staff.type + '.name') })); this.closeSheet(); });
     ctrl.on('placing', (p) => this.renderPlaceBar(p));
     ctrl.on('itemMoved', (it) => this.toast(t('toast.itemMoved', { name: t('items.' + it.type + '.name') }), 'ok'));
+    ctrl.on('deskMoved', () => this.toast(t('toast.deskMoved'), 'ok'));
     ctrl.on('event', (id) => this.showEvent(id));
     ctrl.on('welcome', (w) => this.showWelcome(w));
     ctrl.on('askCloud', () => this.opts.cloud && this.queueModal(this.opts.cloud.renderAsk(this), { dismissable: true, cls: 'cloud' }));
@@ -235,7 +238,8 @@ export class UI {
     if (!p) return;
     const s = this.ctrl.state;
     let label;
-    if (p.moveId != null) label = t('place.moveItem', { name: t('items.' + p.item + '.name') });
+    if (p.moveDeskId != null) label = t('place.moveDesk');
+    else if (p.moveId != null) label = t('place.moveItem', { name: t('items.' + p.item + '.name') });
     else if (p.item) label = t('place.costItem', { name: t('items.' + p.item + '.name'), v: tl(E.itemCost(s, p.item)) });
     else {
       const cost = E.deskCost(s) + (p.hireType ? E.staffCost(s, p.hireType) : 0);
@@ -319,7 +323,8 @@ export class UI {
     if (hit.kind === 'staff') { staff = s.staff.find((x) => x.id === hit.id); desk = staff && s.desks.find((d) => d.id === staff.deskId); }
     if (hit.kind === 'desk') { desk = s.desks.find((d) => d.id === hit.id); staff = desk && s.staff.find((x) => x.deskId === desk.id); }
     this.showModal((box, close) => {
-      if (!staff) { add(box, h('h2', { text: t('info.desk') }), h('p', { text: t('info.deskFree') }), h('button', { class: 'btn primary', onclick: () => { close(); this.openSheet('team'); } }, t('team.hire'))); return; }
+      const moveBtn = desk ? h('button', { class: 'btn', 'data-test': 'desk-move', onclick: () => { close(); this.closeSheet(); this.ctrl.startMoveDesk(desk.id); } }, '↔ ' + t('items.move')) : null;
+      if (!staff) { add(box, h('h2', { text: t('info.desk') }), h('p', { text: t('info.deskFree') }), h('button', { class: 'btn primary', onclick: () => { close(); this.openSheet('team'); } }, t('team.hire')), moveBtn); return; }
       const def = STAFF[staff.type];
       const proj = s.projects.find((p) => p.id === staff.projectId);
       const sp = E.deskSpeedBonus(s, staff.deskId), rw = E.deskRewardBonus(s, staff.deskId);
@@ -335,7 +340,7 @@ export class UI {
       }
       const pr = E.promoteTarget(s, staff.id);
       if (pr) add(box, h('button', { class: 'btn primary', disabled: s.money < pr.cost, 'data-test': 'promote', onclick: () => { const r = this.ctrl.promote(staff.id); if (r.ok) close(); } }, '⬆ ' + t('staff.' + pr.to + '.name') + ' · ' + tl(pr.cost)));
-      add(box, h('button', { class: 'btn ghost', onclick: close }, t('info.close')));
+      add(box, moveBtn, h('button', { class: 'btn ghost', onclick: close }, t('info.close')));
     });
   }
   showMenu() {
@@ -351,17 +356,43 @@ export class UI {
           h('select', { onchange: (e) => this.opts.changeLocale && this.opts.changeLocale(e.target.value) },
             available().map((code) => { const o = h('option', { value: code, text: t('languages.' + code) }); if (code === locale()) o.selected = true; return o; }))) : null,
         h('button', { class: 'btn big', onclick: () => { close(); this.showCredits(); } }, 'ℹ️ ' + t('menu.credits')),
-        h('button', { class: 'btn big danger', onclick: () => { close(); this.confirmReset(); } }, t('menu.reset')),
+        h('button', { class: 'btn big danger', 'data-test': 'menu-reset', onclick: () => { close(); this.confirmReset(); } }, t('menu.reset')),
         h('button', { class: 'btn ghost', onclick: close }, t('menu.close')));
     });
   }
+  // v2.2: two columns (what goes / what stays, from the real save) + 2 s press-and-hold confirm
   confirmReset() {
+    const ctx = this.opts.resetContext ? this.opts.resetContext() : {};
+    const lists = resetLists(this.ctrl.state, Object.assign({ languages: available().length }, ctx));
+    const val = (v) => (v && typeof v === 'object' ? (v.t ? t(v.t) : tl(v.tl)) : v);
+    const line = (it) => { const vars = {}; for (const [k, v] of Object.entries(it.vars || {})) vars[k] = val(v); return h('li', { 'data-key': it.key, text: t(it.key, vars) }); };
     this.showModal((box, close) => {
-      add(box, h('p', { text: t('menu.resetConfirm') }),
-        h('button', { class: 'btn danger big', onclick: () => { close(); this.opts.onReset ? this.opts.onReset() : this.ctrl.reset(); } }, t('menu.resetYes')),
-        h('button', { class: 'btn ghost', onclick: close }, t('menu.close')));
-    });
+      const hint = h('p', { class: 'dim hold-hint', id: 'reset-hold-hint', text: t('reset.holdHint') });
+      const btn = holdButton({ label: t('menu.resetYes'), hint: t('reset.holdHint'), test: 'reset-hold', onConfirm: () => { close(); this.opts.onReset && this.opts.onReset(); } });
+      btn.setAttribute('aria-describedby', 'reset-hold-hint');
+      add(box, h('h2', { text: t('menu.reset') }), h('p', { text: t('menu.resetConfirm') }),
+        h('div', { class: 'reset-cols' },
+          h('section', { class: 'reset-col del', 'data-test': 'reset-delete' }, h('h3', { text: t('reset.deleteTitle') }), h('ul', null, lists.remove.map(line))),
+          h('section', { class: 'reset-col keep', 'data-test': 'reset-keep' }, h('h3', { text: t('reset.keepTitle') }), h('ul', null, lists.keep.map(line)))),
+        hint, btn,
+        h('button', { class: 'btn ghost', autofocus: true, onclick: close }, t('menu.close')));
+    }, { cls: 'reset' });
   }
+  // v2.2: "Geri al" toast for the undo window (a shrinking bar, no numbers)
+  showUndo(pending, onUndo) {
+    this.hideUndo();
+    const left = Math.max(0, pending.until - Date.now());
+    const bar = h('i', { class: 'undo-bar' });
+    const el = h('div', { class: 'toast undo', role: 'status', 'data-test': 'undo-toast' },
+      h('span', { text: t('reset.done') }),
+      h('button', { class: 'btn primary', 'data-test': 'undo', onclick: () => { btnEl.disabled = true; Promise.resolve(onUndo && onUndo()).finally(() => { if (btnEl.isConnected) btnEl.disabled = false; }); } }, t('reset.undo')),
+      bar);
+    const btnEl = el.querySelector('button');
+    bar.style.animationDuration = left + 'ms';
+    this.toastEl.appendChild(el);
+    this.undoEl = el;
+  }
+  hideUndo() { if (this.undoEl) { const el = this.undoEl; this.undoEl = null; el.classList.add('out'); setTimeout(() => el.remove(), 400); } }
   showCredits() {
     this.showModal((box, close) => {
       add(box, h('h2', { text: t('credits.title') }), h('p', { text: t('meta.title') }),
@@ -373,10 +404,10 @@ export class UI {
   share() { openShare(this, this.ctrl, this.opts.snapshot); }
 
   // ------------------------------------------------------------ toasts
-  toast(msg, kind) {
+  toast(msg, kind, ms = 2600) {
     const el = h('div', { class: 'toast ' + (kind || ''), text: msg });
     this.toastEl.appendChild(el);
-    while (this.toastEl.children.length > 3) this.toastEl.removeChild(this.toastEl.firstChild);
-    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, 2600);
+    while (this.toastEl.children.length > 3) { const first = [...this.toastEl.children].find((c) => c !== this.undoEl); if (!first) break; this.toastEl.removeChild(first); }
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, ms);
   }
 }

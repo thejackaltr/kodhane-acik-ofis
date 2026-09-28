@@ -19,7 +19,7 @@ export class OfficeScene extends Phaser.Scene {
     this.ctrl = ctrl; this.opts = opts || {};
     this.userZoom = 1; this.dpr = opts.dpr || 1; this.userAdjusted = false; // v2.1: refit on resize until the player zooms/pans
     this.staffSprites = new Map(); this.deskSprites = new Map(); this.itemSprites = new Map();
-    this.world = []; this.hl = []; this.glows = []; this.glowTimer = null; this.pendingTile = null;
+    this.world = []; this.hl = []; this.bad = []; this.glows = []; this.glowTimer = null; this.pendingTile = null;
     this.animT = 0; this.frameToggle = false;
     this.bubbleT = 3; this.cat = null;
   }
@@ -38,6 +38,7 @@ export class OfficeScene extends Phaser.Scene {
       c.on('deskPlaced', (d) => this.addDesk(d, true)),
       c.on('itemPlaced', (it) => { this.addItem(it, true); this.flashGlow(); }),
       c.on('itemMoved', (it) => { const o = this.itemSprites.get(it.id); if (o) { o.destroy(); this.itemSprites.delete(it.id); } this.addItem(it, true); this.flashGlow(); }),
+      c.on('deskMoved', (r) => this.onDeskMoved(r)),
       c.on('event', (id) => this.playEventVisual(id)),
       c.on('promoted', (s) => this.refreshStaff(s)),
       c.on('delivered', (d) => this.onDelivered(d)),
@@ -332,11 +333,14 @@ export class OfficeScene extends Phaser.Scene {
   // ------------------------------------------------------------ placement mode
   showPlacement(p) {
     for (const h of this.hl) h.setVisible(false);
+    for (const h of this.bad) h.setVisible(false);
     this.ghost.setVisible(false); this.pendingTile = null;
     for (const [iid, o] of this.itemSprites) o.setAlpha(p && p.moveId === iid ? 0.4 : 1);   // v2.1: the item being moved is dimmed
+    this.dimMovingDesk(p && p.moveDeskId != null ? p.moveDeskId : null);                   // v2.2: same for a desk + its person
     if (!p) { if (!this.glowTimer) this.hideGlow(); return; }
     this.showGlow(E.glowTiles(this.ctrl.state, p.moveId));
-    const spots = G.validSpots(this.ctrl.state, p.kind);
+    const moving = p.moveDeskId != null;
+    const spots = moving ? E.deskMoveSpots(this.ctrl.state, p.moveDeskId) : G.validSpots(this.ctrl.state, p.kind);
     let i = 0;
     for (const [gx, gy] of spots) {
       let h = this.hl[i];
@@ -345,17 +349,58 @@ export class OfficeScene extends Phaser.Scene {
       h.setPosition(w.x, w.y).setVisible(true).setAlpha(0.9);
       i++;
     }
+    // v2.2: while a desk is moved, every tile it cannot go to is red
+    if (moving) {
+      const ok = new Set(spots.map(([x, y]) => x + ',' + y)), a = G.stageArea(this.ctrl.state.stage);
+      let j = 0;
+      for (let gx = 0; gx < a.w; gx++) for (let gy = 0; gy < a.h; gy++) {
+        if (ok.has(gx + ',' + gy)) continue;
+        let h = this.bad[j];
+        if (!h) { h = this.add.image(0, 0, A, 'sec_karo_yok_01').setScale(S).setDepth(-10001); this.bad.push(h); }
+        const w = G.tileToWorld(gx, gy);
+        h.setPosition(w.x, w.y).setVisible(true).setAlpha(0.55);
+        j++;
+      }
+    }
     this.ghost.setFrame(p.kind);
     if (spots.length) { this.fitCamera(false); }
+  }
+  dimMovingDesk(deskId) {
+    const st = this.ctrl.state;
+    for (const [id, o] of this.deskSprites) o.setAlpha(id === deskId ? 0.4 : 1);
+    for (const s of st.staff) { const o = this.staffSprites.get(s.id); if (o && !o.getData('walking')) o.setAlpha(s.deskId === deskId ? 0.4 : 1); }
+  }
+  // v2.2: desk moved -> desk sprite and the person sitting there go to the new spot; area glow flashes (bonus changed)
+  onDeskMoved(r) {
+    const d = r.desk, old = this.deskSprites.get(d.id);
+    if (old) { old.destroy(); this.deskSprites.delete(d.id); }
+    this.addDesk(d, true);
+    for (const s of r.staff || []) {
+      const o = this.staffSprites.get(s.id); if (!o) continue;
+      this.tweens.killTweensOf(o); o.setData('walking', false); o.setAlpha(1);
+      const p = this.seatPos(d.id);
+      o.setPosition(p.x, p.y - 30).setDepth(G.depthOf(p.x, p.y));
+      this.tweens.add({ targets: o, y: p.y, duration: 320, ease: 'Back.easeOut' });
+    }
+    this.flashGlow();
   }
   hoverPlacement(wx, wy) {
     const p = this.ctrl.placing; if (!p) return;
     const { gx, gy } = G.worldToTile(wx, wy);
     if (!G.inArea(this.ctrl.state.stage, gx, gy)) { this.ghost.setVisible(false); return; }
     const w = G.tileToWorld(gx, gy);
-    const ok = G.canPlace(this.ctrl.state, p.kind, gx, gy);
+    const ok = this.placeOk(p, gx, gy);
     this.ghost.setPosition(w.x, w.y).setVisible(true).setTint(ok ? 0xb8ffb8 : 0xff9090);
     if (p.item) this.previewItem(p, gx, gy, ok);
+    else if (p.moveDeskId != null) this.pendingTile = ok ? gx + ',' + gy : null;
+  }
+  // may the thing being placed / moved go to (gx,gy)? (a moved desk or item never blocks itself; its own spot is not a move)
+  placeOk(p, gx, gy) {
+    const st = this.ctrl.state;
+    if (!G.inArea(st.stage, gx, gy) || !this.ctrl.canPlaceHere(gx, gy)) return false;
+    if (p.moveDeskId != null) { const d = st.desks.find((x) => x.id === p.moveDeskId); if (d && d.gx === gx && d.gy === gy) return false; }
+    if (p.moveId != null) { const it = (st.items || []).find((x) => x.id === p.moveId); if (it && it.gx === gx && it.gy === gy) return false; }
+    return true;
   }
   // v2: an item about to be placed lights up its future area
   previewItem(p, gx, gy, ok) {
@@ -472,12 +517,13 @@ export class OfficeScene extends Phaser.Scene {
     if (c.placing) {
       const { gx, gy } = G.worldToTile(wx, wy);
       // items: first tap shows where the glow will be, a second tap on the same tile places it (mouse: hover + click)
-      if (c.placing.item && this.pendingTile !== gx + ',' + gy) {
-        const ok = G.inArea(c.state.stage, gx, gy) && G.canPlace(c.state, c.placing.kind, gx, gy);
+      // v2.2: moving a desk works the same way (preview tap + confirm tap on touch, hover + click with a mouse)
+      if ((c.placing.item || c.placing.moveDeskId != null) && this.pendingTile !== gx + ',' + gy) {
+        const ok = this.placeOk(c.placing, gx, gy);
         if (!ok) { this.opts.onPlaceFail && this.opts.onPlaceFail('yer'); return; }
         const w = G.tileToWorld(gx, gy);
         this.ghost.setPosition(w.x, w.y).setVisible(true).setTint(0xb8ffb8);
-        this.previewItem(c.placing, gx, gy, true);
+        if (c.placing.item) this.previewItem(c.placing, gx, gy, true); else this.pendingTile = gx + ',' + gy;
         return;
       }
       const r = c.placeAt(gx, gy);

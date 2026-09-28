@@ -60,6 +60,13 @@ export function chebDist(tilesA, tilesB) {
   return best;
 }
 
+// v2.2: occupancy without one desk (its desk + chair tiles) or one item — used while that piece is being moved
+export function occupancyExcept(state, ex = {}) {
+  const occ = occupancy(state);
+  if (ex.deskId != null) { const d = state.desks.find((x) => x.id === ex.deskId); if (d) for (const [x, y] of deskTiles(d)) { const k = x + ',' + y; if (occ.get(k) === 'desk:' + d.id || occ.get(k) === 'seat:' + d.id) occ.delete(k); } }
+  if (ex.itemId != null) { const it = (state.items || []).find((x) => x.id === ex.itemId); if (it && occ.get(it.gx + ',' + it.gy) === 'item:' + it.id) occ.delete(it.gx + ',' + it.gy); }
+  return occ;
+}
 export function canPlace(state, kind, gx, gy, occ) {
   occ = occ || occupancy(state);
   const tiles = footprint(kind, gx, gy).concat(reserved(kind, gx, gy));
@@ -69,8 +76,9 @@ export function canPlace(state, kind, gx, gy, occ) {
   }
   return true;
 }
-export function validSpots(state, kind) {
-  const occ = occupancy(state), a = stageArea(state.stage), out = [];
+export function validSpots(state, kind, occ) {
+  occ = occ || occupancy(state);
+  const a = stageArea(state.stage), out = [];
   for (let gx = 0; gx < a.w; gx++) for (let gy = 0; gy < a.h; gy++) if (canPlace(state, kind, gx, gy, occ)) out.push([gx, gy]);
   return out;
 }

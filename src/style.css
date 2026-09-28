@@ -143,3 +143,21 @@ button { font: inherit; }
 .placebar:not(.hidden) ~ .hint, .hint:has(~ .placebar:not(.hidden)) { bottom: calc(150px + var(--safe-b)); }
 .lang { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; font-weight: 650; }
 .lang select { min-height: 44px; font: inherit; border-radius: 10px; }
+/* v2.2: "Baştan başla" — red danger button, two-column confirm, press-and-hold fill (no numbers), undo toast */
+.btn.danger { background: var(--bad); border-color: #a92f2f; color: #fff; }
+.btn.hold { position: relative; overflow: hidden; min-height: 52px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.btn.hold .hold-fill { position: absolute; inset: 0; background: #8f1f1f; transform: scaleX(0); transform-origin: left center; pointer-events: none; }
+.btn.hold .hold-label { position: relative; pointer-events: none; }
+.btn.hold.holding { border-color: #7a1a1a; }
+.btn.hold:focus-visible { outline: 3px solid var(--accent2); outline-offset: 2px; }
+.reset-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
+.reset-col { border-radius: 12px; padding: 8px 10px; }
+.reset-col h3 { margin: 0 0 4px; font-size: 15px; }
+.reset-col ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+.reset-col.del { background: #fdeaea; color: #7a1f1f; }
+.reset-col.keep { background: #e8f5ee; color: #1f5c3b; }
+@media (max-width: 360px) { .reset-cols { grid-template-columns: 1fr; } }
+.toast.undo { pointer-events: auto; position: relative; overflow: hidden; display: flex; align-items: center; gap: 10px; padding: 6px 6px 10px 12px; font-size: 14px; }
+.toast.undo .btn { min-height: 44px; min-width: 44px; padding: 8px 14px; }
+.toast.undo .undo-bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--accent2); transform-origin: left center; animation: undo-bar linear forwards; }
+@keyframes undo-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }

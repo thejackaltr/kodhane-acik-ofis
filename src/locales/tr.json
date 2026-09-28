@@ -155,7 +155,8 @@
     "bad": "Buraya sığmıyor.",
     "noMoney": "Para yetmiyor.",
     "costItem": "{name}: {v}",
-    "moveItem": "{name} için yeni bir yer seç. Taşımak ücretsiz."
+    "moveItem": "{name} için yeni bir yer seç. Taşımak ücretsiz.",
+    "moveDesk": "Masa için yeni bir yer seç. Taşımak ücretsiz."
   },
   "bubbles": {
     "work": [
@@ -214,7 +215,8 @@
     "full": "Önce devam eden işler bitsin.",
     "noMoney": "Para yetmiyor.",
     "catPet": "Kedi sevildi.",
-    "itemMoved": "{name} taşındı."
+    "itemMoved": "{name} taşındı.",
+    "deskMoved": "Masa taşındı."
   },
   "events": {
     "title": "Olay",
@@ -480,5 +482,33 @@
     "s2": "Şimdi “biz” diyoruz.",
     "s3": "Kahveyi nereye koyduğun önemli.",
     "s4": "Kodhane: Açık Ofis. Tarayıcıda ve telefonda oyna."
+  },
+  "reset": {
+    "_gecici": "GEÇİCİ METİN: bu bölümdeki tüm reset.* metinleri, place.moveDesk ve toast.deskMoved Yazı'nın onayını bekliyor (v2.2).",
+    "holdHint": "Onaylamak için düğmeyi basılı tut.",
+    "deleteTitle": "Silinecekler",
+    "keepTitle": "Kalacaklar",
+    "del": {
+      "office": "Ofis: {stage}, {n} masa",
+      "money": "Kasa: {v}",
+      "staff": "Ekip: {n} çalışan",
+      "items": "Eşyalar: {n} adet",
+      "upgrades": "Geliştirmeler: {n} adet",
+      "projects": "Süren projeler ve teklifler",
+      "stats": "İstatistikler: {p} proje, {k} kedi uykusu, toplam {v}"
+    },
+    "keep": {
+      "account": "Bulut hesabın ({email})",
+      "leaderboard": "Sıralamadaki puanın ve takma adın",
+      "backup": "Buluttaki eski ofisinin 30 günlük yedeği",
+      "language": "Dil seçimin",
+      "nothing": "Hiçbir şey. Ofis ilk günkü gibi baştan başlar."
+    },
+    "done": "Ofis sıfırlandı.",
+    "undo": "Geri al",
+    "restored": "Ofisin geri geldi.",
+    "undoExpired": "Geri alma süresi doldu.",
+    "otherDevice": "Oyun başka bir cihazda ya da sekmede sıfırlandı. Güncel kayıt yüklendi.",
+    "failed": "Şu an sıfırlanamadı. Bağlantını kontrol edip tekrar dene."
   }
 }

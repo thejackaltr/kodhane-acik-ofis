@@ -8,6 +8,9 @@ import { UI } from './ui/ui.js';
 import { CloudSync, rememberReferral } from './cloud/cloud.js';
 import { CloudUI } from './cloud/cloudUi.js';
 import { LeaderboardUI } from './cloud/leaderboard.js';
+import { createSaveApi, resolveMode } from './cloud/resetApi.js';
+import { ResetFlow } from './cloud/resetFlow.js';
+import { SAVE_KEY } from './logic/save.js';
 import './style.css';
 
 // Locales: every src/locales/<code>.json is picked up automatically (tr = source + fallback).
@@ -27,8 +30,21 @@ function changeLocale(code) { try { localStorage.setItem(LOCALE_KEY, code); } ca
 const DPR = Math.min(2, window.devicePixelRatio || 1);   // capped at 2
 const storage = (() => { try { return window.localStorage; } catch (e) { return { getItem: () => null, setItem: () => {}, removeItem: () => {} }; } })();
 const ctrl = new Controller(storage);
-const cloud = new CloudSync(ctrl);
+// v2.2: reset/restore only through Backend's RPC.reset / RPC.restore (cloud.js) (VITE_RESET_MOCK=1: in-browser mock; see cloud/resetApi.js)
+const cloud = new CloudSync(ctrl, null, { saveApi: (client) => createSaveApi({ mode: resolveMode(), client, storage }) });
+const resetApi = cloud.saveApi;
 const cloudUi = new CloudUI(cloud);
+const resetFlow = new ResetFlow(ctrl, resetApi, { storage, beforeReset: () => cloud.cancelPending(), pushNow: () => cloud.pushNow(true), ui: {
+  undoShown: (p) => ui.showUndo(p, () => resetFlow.undo()),
+  undoGone: () => ui.hideUndo(),
+  restored: () => ui.toast(t('reset.restored'), 'ok'),
+  otherDevice: () => { ui.hideUndo(); ui.toast(t('reset.otherDevice'), '', 6000); },
+  failed: (key) => ui.toast(t(key), '', 4000)
+} });
+// 409 on a push: load the server copy; it is the cloud copy, so do not push it straight back
+cloud.onStale = (cur) => resetFlow.handleStale(cur).then((ok) => { if (ok) cloud.lastSig = cloud.sig(ctrl.state); });
+// another tab of this browser saved: if it reset/restored (newer revision), load it instead of overwriting it
+window.addEventListener('storage', (e) => { if (e.key === SAVE_KEY) ctrl.checkStale(); });
 
 const parent = document.getElementById('game');
 const size = () => ({ w: Math.max(1, parent.clientWidth), h: Math.max(1, parent.clientHeight) });
@@ -53,11 +69,13 @@ const ui = new UI(document.getElementById('ui'), ctrl, {
   zoom: (f) => scene && scene.zoomBy(f, scene.scale.width / 2, scene.scale.height / 2),
   fit: () => scene && scene.fitView(),
   snapshot: (cb) => snapshot(cb),
-  onReset: () => { ctrl.reset(); },
+  onReset: () => resetFlow.reset(),
+  resetContext: () => ({ signedIn: cloud.signedIn(), email: cloud.client.user ? cloud.client.user.email : '' }),
   changeLocale
 });
 
 leaderboard = new LeaderboardUI(cloud, ui);
+resetFlow.resume();   // reloaded inside the 10 s undo window -> the undo toast comes back
 // v2: anonymous stage counter (event name only; no user id, works for guests too)
 ctrl.on('count', (name) => { cloud.client.countEvent(name).catch(() => {}); });
 ctrl.countStage();
@@ -77,7 +95,7 @@ const game = new Phaser.Game({
     dpr: DPR,
     padTop: 96, padBottom: 90,
     onInfo: (hit) => ui.showInfo(hit),
-    onPlaceFail: (reason) => ui.toast(reason === 'para' ? t('place.noMoney') : t('place.bad')),
+    onPlaceFail: (reason) => reason !== 'ayni' && ui.toast(reason === 'para' ? t('place.noMoney') : t('place.bad')),
     onReady: (sc) => { scene = sc; window.__acikOfis.scene = sc; document.body.classList.add('ready'); }
   })
 });
@@ -119,7 +137,7 @@ window.addEventListener('pagehide', () => ctrl.save());
 if (ctrl.pendingWelcome) ui.showWelcome(ctrl.pendingWelcome);
 
 // Test/debug handle (no secrets; read-only helpers + controller)
-window.__acikOfis = { ctrl, ui, cloud, leaderboard, game, scene: null, version: __APP_VERSION__ };
+window.__acikOfis = { ctrl, ui, cloud, leaderboard, game, resetFlow, scene: null, version: __APP_VERSION__ };
 
 // Service worker (production only): versioned cache-first; show "new version" toast.
 let updateRequested = false;

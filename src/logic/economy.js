@@ -1,6 +1,6 @@
 // Core economy + simulation (pure; no DOM, no Phaser). Time is passed in explicitly.
 import { CFG, STAFF, DESK, STAGES, UPGRADES, SAVE_VERSION, PROMOTE, PROMOTE_DISCOUNT, ITEMS } from './config.js';
-import { canPlace, occupancy, deskTiles, chebDist, areaTiles, ringTiles } from './grid.js';
+import { canPlace, validSpots, occupancy, occupancyExcept, deskTiles, chebDist, areaTiles, ringTiles } from './grid.js';
 import * as R from './rng.js';
 
 export const PROJECT_KEYS = ['kafe', 'berber', 'pastane', 'dernek', 'apartman', 'kirtasiye', 'nalbur', 'dugun', 'spor', 'pansiyon', 'balikci', 'veteriner', 'kuafor', 'firin', 'oto'];
@@ -14,6 +14,7 @@ export function newState(now, seed) {
     playSec: 0, simSec: 0,
     stage: 0,
     rng: (seed == null ? (now % 2147483647) : seed) | 0,
+    revision: 0,                    // v2.2: save generation; the server bumps it on reset/restore and rejects older writes
     nextId: 3,
     desks: [{ id: 1, kind: DESK.founderKind, gx: st.founderDesk.gx, gy: st.founderDesk.gy }],
     staff: [{ id: 2, type: 'kurucu', deskId: 1, projectId: null }],
@@ -49,6 +50,8 @@ function layoutSig(state) {
   const it = state.items || [], d = state.desks;
   let pm = '', pos = '';
   for (const x of it) pos += x.id + '@' + x.gx + ',' + x.gy + ';';   // v2.1: items can move
+  pos += '|';
+  for (const x of d) pos += x.id + '@' + x.gx + ',' + x.gy + ';';    // v2.2: desks can move too -> bonus recalculated at once
   for (const s of state.staff) if (STAFF[s.type] && STAFF[s.type].adjSpeed) pm += s.deskId + ',';
   return d.length + ':' + (d.length ? d[d.length - 1].id : 0) + ':' + pos + ':' + pm + ':' + state.stage;
 }
@@ -187,10 +190,30 @@ export function moveItem(state, itemId, gx, gy) {
   if (!it) return { ok: false, reason: 'yok' };
   if (!Number.isInteger(gx) || !Number.isInteger(gy)) return { ok: false, reason: 'yer' };
   if (it.gx === gx && it.gy === gy) return { ok: false, reason: 'ayni' };
-  const occ = occupancy(state); occ.delete(it.gx + ',' + it.gy);
+  const occ = occupancyExcept(state, { itemId: it.id });
   if (!canPlace(state, ITEMS[it.type].kind, gx, gy, occ)) return { ok: false, reason: 'yer' };
   it.gx = gx; it.gy = gy;
   return { ok: true, item: it, cost: 0 };
+}
+// v2.2: move a desk (with the person sitting at it) to another free spot, free of charge. Staff only point at their desk
+// (deskId), so they move along; projects keep running. The save format is unchanged (desk keeps { id, kind, gx, gy }).
+export function moveDesk(state, deskId, gx, gy) {
+  const d = state.desks.find((x) => x.id === deskId);
+  if (!d) return { ok: false, reason: 'yok' };
+  if (!Number.isInteger(gx) || !Number.isInteger(gy)) return { ok: false, reason: 'yer' };
+  if (d.gx === gx && d.gy === gy) return { ok: false, reason: 'ayni' };
+  if (!canPlace(state, d.kind, gx, gy, occupancyExcept(state, { deskId: d.id }))) return { ok: false, reason: 'yer' };
+  d.gx = gx; d.gy = gy;
+  return { ok: true, desk: d, staff: state.staff.filter((s) => s.deskId === d.id), cost: 0 };
+}
+// tiles where a desk being moved may go (its own current tiles count as free)
+export function deskMoveSpots(state, deskId) {
+  const d = state.desks.find((x) => x.id === deskId);
+  if (!d) return [];
+  const occ = occupancyExcept(state, { deskId });
+  const out = [];
+  for (const spot of validSpots(state, d.kind, occ)) if (spot[0] !== d.gx || spot[1] !== d.gy) out.push(spot);
+  return out;
 }
 export function maxActiveProjects(state) { return Math.min(4, 1 + Math.floor((state.staff.length - 1) / 3)); }
 export function autoAccept(state) { return state.upgrades.some((id) => UPGRADES[id] && UPGRADES[id].autoAccept); }

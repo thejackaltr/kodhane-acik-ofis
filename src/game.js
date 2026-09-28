@@ -86,28 +86,57 @@ export class Controller {
   save(now = Date.now()) {
     if (this.resetting) return false;
     this.saveTimer = 0;
+    if (this.checkStale()) return false;   // v2.2: another tab reset/restored the save -> never overwrite it
     const ok = SAVE.store(this.storage, this.state, now);
     if (this.cloudHooks && this.cloudHooks.onSaved) { try { this.cloudHooks.onSaved(this.state); } catch (e) { /* cloud is optional */ } }
+    this.emit('saved', this.state);
     return ok;
+  }
+  // v2.2: the stored save has a newer revision than ours (reset/undo in another tab of this browser).
+  // Emits 'stale' { data, revision, source: 'local' } and returns true; the reset flow then loads it.
+  checkStale() {
+    let str = null;
+    try { str = this.storage.getItem(SAVE.SAVE_KEY); } catch (e) { return false; }
+    if (!str) return false;
+    let data = null; try { data = JSON.parse(str); } catch (e) { return false; }
+    const rev = data && typeof data.revision === 'number' && isFinite(data.revision) ? Math.floor(data.revision) : 0;
+    if (!(rev > (this.state.revision || 0))) return false;
+    this.emit('stale', { data, revision: rev, source: 'local' });
+    return true;
   }
   // used by cloud sync when the cloud copy wins
   replaceState(obj, now = Date.now()) {
     const s = SAVE.migrate(obj, now);
     if (!s) return null;
+    if (this.placing) this.cancelPlacing();
     this.state = s;
     const w = OFF.catchUp(this.state, now);
     this.state.lastTick = now;
     this.save(now);
     this.emit('reload', this.state);
-    this.changed();
+    this.changed(); this.emit('tutorial');
     return w;
   }
-  reset(now = Date.now()) {
-    this.resetting = true;
-    try { this.storage.removeItem(SAVE.SAVE_KEY); } catch (e) { /* ignore */ }
+  // v2.2: take the server's/other tab's current save (after a stale write). data null/{} = fresh game after a reset.
+  adoptRemote(data, revision, now = Date.now()) {
+    const fresh = !data || typeof data !== 'object' || !Object.keys(data).length;
+    const obj = fresh ? E.newState(now) : JSON.parse(JSON.stringify(data));
+    obj.revision = Math.max(0, Math.floor(+revision || 0));
+    if (fresh) { this.catTimer = 30; this.tip = null; }
+    return this.replaceState(obj, now);
+  }
+  // v2.2: reset accepted (RPC.reset on the server, or local for guests) -> new game with the new revision. Like the
+  // server's reset payload, flags.stagesCounted (anonymous stage counter, no double counting) and cloudAsked are kept.
+  // Stored locally only: the client never pushes an empty save to the cloud because of a reset.
+  applyReset(revision, now = Date.now(), keep = {}) {
+    if (this.placing) this.cancelPlacing();
+    const f = this.state.flags || {};
     this.state = E.newState(now);
-    this.resetting = false;
-    this.save(now);
+    this.state.revision = Math.max(0, Math.floor(+revision || 0));
+    this.state.flags.stagesCounted = Array.isArray(f.stagesCounted) ? f.stagesCounted.slice() : [];
+    this.state.flags.cloudAsked = !!(f.cloudAsked || keep.cloudAsked);
+    this.fresh = true; this.tip = null; this.catTimer = 30; this.saveTimer = 0;
+    SAVE.store(this.storage, this.state, now);
     this.emit('reload', this.state);
     this.changed(); this.emit('tutorial');
   }
@@ -174,13 +203,30 @@ export class Controller {
     this.emit('placing', this.placing); this.emit('tutorial');
     return { ok: true };
   }
+  // v2.2: move a desk together with the person sitting at it (free; same flow as moving an item). Projects keep running.
+  startMoveDesk(deskId) {
+    const d = this.state.desks.find((x) => x.id === deskId);
+    if (!d) return { ok: false, reason: 'yok' };
+    this.placing = { kind: d.kind, hireType: null, item: null, moveDeskId: d.id };
+    this.emit('placing', this.placing); this.emit('tutorial');
+    return { ok: true };
+  }
+  // can the thing being placed/moved go to (gx,gy)? (a moved desk/item does not block itself)
+  canPlaceHere(gx, gy) {
+    const p = this.placing; if (!p) return false;
+    const occ = p.moveDeskId != null ? G.occupancyExcept(this.state, { deskId: p.moveDeskId }) : p.moveId != null ? G.occupancyExcept(this.state, { itemId: p.moveId }) : undefined;
+    return G.canPlace(this.state, p.kind, gx, gy, occ);
+  }
   cancelPlacing() { this.placing = null; this.emit('placing', null); this.emit('tutorial'); }
   placeAt(gx, gy) {
     const p = this.placing; if (!p) return { ok: false };
     const s = this.state;
-    if (!G.canPlace(s, p.kind, gx, gy)) return { ok: false, reason: 'yer' };
+    if (!this.canPlaceHere(gx, gy)) return { ok: false, reason: 'yer' };
     let r;
-    if (p.moveId != null) {
+    if (p.moveDeskId != null) {
+      r = E.moveDesk(s, p.moveDeskId, gx, gy);
+      if (r.ok) { this.placing = null; this.emit('placing', null); this.emit('deskMoved', r); this.changed(); this.save(); }
+    } else if (p.moveId != null) {
       r = E.moveItem(s, p.moveId, gx, gy);
       if (r.ok) { this.placing = null; this.emit('placing', null); this.emit('itemMoved', r.item); this.changed(); this.save(); }
     } else if (p.item) {
@@ -204,7 +250,8 @@ export class Controller {
   laterEvent() { EV.dismiss(this.state); }
   hint() {
     const p = this.placing, tip = this.tip && Date.now() <= this.tip.until ? this.tip.key : null;
-    return TU.currentHint(this.state, { placingDesk: !!p && !p.item, placingItem: !!(p && p.item), placingPm: !!(p && p.hireType === 'pm'),
+    const moving = !!p && p.moveDeskId != null;
+    return TU.currentHint(this.state, { placingDesk: !!p && !p.item && !moving, placingItem: !!(p && (p.item || moving)), placingPm: !!(p && p.hireType === 'pm'),
       glow: !!p && E.glowTiles(this.state).size > 0, tip });
   }
 }

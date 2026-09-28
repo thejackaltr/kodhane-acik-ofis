@@ -26,7 +26,8 @@ export function migrate(obj, now) {
     stage: Math.max(0, Math.min(STAGES.length - 1, Math.floor(num(obj.stage)))),
     nextId: Math.max(3, Math.floor(num(obj.nextId, 3))),
     lastSaved: num(obj.lastSaved, now), lastTick: num(obj.lastTick, num(obj.lastSaved, now)),
-    offerTimer: num(obj.offerTimer)
+    offerTimer: num(obj.offerTimer),
+    revision: Math.max(0, Math.floor(num(obj.revision)))   // v2.2 (older saves: 0)
   });
   const desks = arr(obj.desks).filter((d) => d && typeof d.kind === 'string' && Number.isInteger(d.gx) && Number.isInteger(d.gy) && Number.isInteger(d.id));
   if (desks.length) s.desks = desks;

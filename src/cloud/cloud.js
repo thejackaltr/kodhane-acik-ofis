@@ -5,6 +5,16 @@
 import { chooseWinner, needsBackup } from '../logic/sync.js';
 import { BACKUP_KEY } from '../logic/save.js';
 
+// v2.2 save-safety RPCs (Backend contract, docs/v2.2-backend-client-notes.md). The ONLY place these names live:
+// every call site goes through CloudClient.resetSave/restoreSave/listBackups. Game-specific functions (the two games
+// move to separate Supabase instances), so no p_game parameter. Signatures assumed = the old reset_save/restore_save
+// minus p_game until the notes name them (reset: {}, restore: { p_backup_id }, list: {}).
+export const RPC = Object.freeze({
+  reset: 'acik_ofis_reset_save',
+  restore: 'acik_ofis_restore_save',
+  listBackups: 'acik_ofis_list_save_backups'
+});
+
 const DEFAULTS = {
   url: 'https://supabase.teserix.com',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3OTA1NjI1NzAsImV4cCI6MTg5MzQ1NjAwMCwicm9sZSI6ImFub24iLCJpc3MiOiJzdXBhYmFzZSJ9._ugMmDZoHw2uolYZUT5xeQbM3xiZnoCu9WZUv5-iNjk',
@@ -82,21 +92,31 @@ export class CloudClient {
     }
     return this.refreshing;
   }
-  async pull() {
+  // v2.2: withRevision = read the server columns revision + best_score (Backend v2.2 migration; see resetApi.js)
+  async pull(withRevision) {
     const tok = await this.token();
-    const rows = await this.api('/rest/v1/' + this.cfg.table + '?select=data,save_version,updated_at&user_id=eq.' + encodeURIComponent(this.user.id), { token: tok });
+    const rows = await this.api('/rest/v1/' + this.cfg.table + '?select=data,save_version,updated_at' + (withRevision ? ',revision,best_score' : '') + '&user_id=eq.' + encodeURIComponent(this.user.id), { token: tok });
     return Array.isArray(rows) && rows.length ? rows[0] : null;
   }
-  async push(data, keepalive) {
+  // upsert of the player's row. v2.2: revision (= last seen server revision + 1) goes into the row; the server
+  // refuses older/equal ones with 409 PT409 stale_revision / stale_write. Never DELETE, never an empty save on reset.
+  async push(data, keepalive, revision) {
+    if (!data || typeof data !== 'object' || !Array.isArray(data.desks) || !data.desks.length) throw new Error('empty save refused');   // resets go through RPC.reset only
     const tok = await this.token();
     const now = new Date().toISOString();
+    const body = { user_id: this.user.id, data, save_version: data.v || 1, updated_at: now };
+    if (revision != null) body.revision = revision;
     await this.api('/rest/v1/' + this.cfg.table + '?on_conflict=user_id', {
       method: 'POST', token: tok, keepalive,
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: { user_id: this.user.id, data, save_version: data.v || 1, updated_at: now }
+      body
     });
     return now;
   }
+  // v2.2 Backend RPCs (SECURITY DEFINER, auth.uid()): reset keeps the row (backup + revision + 1), restore brings a backup back
+  async resetSave() { const tok = await this.token(); return this.api('/rest/v1/rpc/' + RPC.reset, { method: 'POST', token: tok, body: {} }); }
+  async restoreSave(backupId) { const tok = await this.token(); return this.api('/rest/v1/rpc/' + RPC.restore, { method: 'POST', token: tok, body: { p_backup_id: backupId } }); }
+  async listBackups() { const tok = await this.token(); return this.api('/rest/v1/rpc/' + RPC.listBackups, { method: 'POST', token: tok, body: {} }); }
   // anonymous per-day counter on the Kodhane Supabase (anon key only, never the user token; no personal data)
   countEvent(name) { return this.api('/rest/v1/rpc/' + this.cfg.countRpc, { method: 'POST', body: { p_event: name } }); }
   // v2 leaderboard: guests call with the public key only; signed in, the user token lets the list flag "is_me"
@@ -124,7 +144,7 @@ export class CloudClient {
 
 // Sync glue between the controller and the client. status: guest|sending|code|verifying|syncing|saved|error
 export class CloudSync {
-  constructor(ctrl, cfg) {
+  constructor(ctrl, cfg, opts = {}) {
     this.ctrl = ctrl;
     this.client = new CloudClient(cfg || (typeof window !== 'undefined' && window.ACIK_OFIS_CLOUD_CONFIG) || null);
     this.status = this.client.user ? 'syncing' : 'guest';
@@ -133,6 +153,9 @@ export class CloudSync {
     this.pendingEmail = '';
     try { const p = JSON.parse(lsGet(this.client.cfg.pendingKey) || 'null'); if (p && Date.now() - p.at < 3600e3) this.pendingEmail = p.email; } catch (e) { /* ignore */ }
     this.listeners = [];
+    this.saveApi = opts.saveApi ? opts.saveApi(this.client) : null;   // v2.2: resetApi facade ('real' = revision protocol on)
+    this.onStale = null;     // v2.2: called with the current row { data, revision } when the server refused a stale write
+    this.pushing = null;     // v2.2: pushes run one after another (never two writes with the same revision)
     ctrl.cloudHooks = { onSaved: () => this.schedulePush() };
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => { if (document.hidden) this.flush(); });
@@ -184,6 +207,9 @@ export class CloudSync {
       return false;
     }
   }
+  revMode() { return !!(this.saveApi && this.saveApi.mode === 'real' && this.client.user); }
+  // v2.2: before a reset: no pending timer push of the old game, next push always goes out
+  cancelPending() { if (this.pushTimer) { clearTimeout(this.pushTimer); this.pushTimer = null; } this.lastSig = ''; }
   sig(s) { const c = Object.assign({}, s); delete c.lastSaved; delete c.lastTick; try { return JSON.stringify(c); } catch (e) { return String(Math.random()); } }
   // first login migrates the local save; later logins merge by the Kodhane rule (higher lifetime earnings wins)
   reconcile(fromLogin) {
@@ -192,11 +218,12 @@ export class CloudSync {
     this.set('syncing');
     this.reconciling = (async () => {
       try {
-        const row = await this.client.pull();
+        const row = await this.client.pull(this.revMode());
         this.ctrl.save();
         const local = JSON.parse(JSON.stringify(this.ctrl.state));
         const localTime = local.lastSaved || 0;
-        const cloud = row && row.data && typeof row.data === 'object' ? row.data : null;
+        let cloud = row && row.data && typeof row.data === 'object' ? row.data : null;
+        if (cloud && row.revision != null) cloud = Object.assign({}, cloud, { revision: row.revision });   // the column is the authority
         const cloudTime = row ? (Date.parse(row.updated_at) || cloud && cloud.lastSaved || 0) : 0;
         const win = chooseWinner(local, localTime, cloud, cloudTime);
         let note = fromLogin ? 'cloud.loggedInToast' : '';
@@ -207,6 +234,8 @@ export class CloudSync {
         } else if (cloud && needsBackup(cloud, cloudTime, local, localTime)) {
           lsSet(BACKUP_KEY, JSON.stringify(cloud));
         }
+        // v2.2: the next write must be above the server's revision even when the local copy won
+        if (row && row.revision != null && row.revision > (this.ctrl.state.revision || 0)) this.ctrl.state.revision = row.revision;
         this.reconciled = true;
         const pushed = await this.pushNow(true);
         if (!row && pushed) this.countKodhaneSignup();
@@ -231,17 +260,30 @@ export class CloudSync {
     if (!this.client.user || !this.reconciled || this.pushTimer) return;
     this.pushTimer = setTimeout(() => { this.pushTimer = null; this.pushNow(false); }, this.client.cfg.pushDelayMs);
   }
-  async pushNow(force, keepalive) {
+  pushNow(force, keepalive) {
+    // v2.2: one push at a time (flush + timer never send the same revision twice)
+    const run = () => this.pushOnce(force, keepalive);
+    this.pushing = (this.pushing || Promise.resolve()).then(run, run);
+    return this.pushing;
+  }
+  async pushOnce(force, keepalive) {
     if (!this.client.user || !this.reconciled) return false;
-    const s = this.sig(this.ctrl.state);
+    const st = this.ctrl.state;
+    const s = this.sig(st);
     if (!force && s === this.lastSig) return true;
     if (!keepalive) this.set('syncing');
     try {
-      await this.client.push(this.ctrl.state, keepalive);
+      if (this.revMode()) {
+        const next = (st.revision || 0) + 1;                       // last seen server revision + 1
+        await this.saveApi.writeSave({ data: st, revision: next, keepalive });
+        if (this.ctrl.state === st && (st.revision || 0) < next) st.revision = next;
+      } else await this.client.push(st, keepalive);
       this.lastSig = s; this.lastPushAt = Date.now();
       this.set('saved');
       return true;
     } catch (e) {
+      // 409 PT409 (stale_revision / stale_write): reset/restore or a newer write elsewhere -> load it, never overwrite it
+      if (e && (e.code === 'stale' || e.status === 409 || e.code === 'PT409')) { this.lastSig = ''; this.set('saved'); if (this.onStale) this.onStale(null); return false; }
       if (!this.client.user) { this.reconciled = false; this.set('guest'); return false; }
       this.set('error', this.errKey(e, 'cloud.unreachable'));
       return false;

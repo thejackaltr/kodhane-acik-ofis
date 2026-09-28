@@ -9,6 +9,7 @@
     "test": "node --test tests/unit/*.test.mjs",
     "atlas": "node tools/atlas/build.mjs",
     "smoke": "node tests/smoke/smoke.mjs",
+    "smoke:v22": "node tests/smoke/v22.mjs",
     "balance": "node tools/balance.mjs 60"
   },
   "license": "MIT",
