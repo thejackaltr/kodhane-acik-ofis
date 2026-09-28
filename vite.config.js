@@ -6,7 +6,10 @@ import { execSync } from 'node:child_process';
 const tr = JSON.parse(fs.readFileSync(new URL('./src/locales/tr.json', import.meta.url)));
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url)));
 function sha() { try { return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (e) { return 'dev'; } }
-const VERSION = pkg.version + '-' + (process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : sha()) + '-' + Date.now().toString(36);
+// version stamp (sw.js cache name + window.__acikOfis.version): package.json version + short commit + build time.
+// Commit: GITHUB_SHA (GitHub Actions / Dockerfile build ARG) -> local git -> 'dev' (Docker has no .git).
+const commit = (process.env.GITHUB_SHA || '').trim();
+const VERSION = pkg.version + '-' + (commit ? commit.slice(0, 7) : sha()) + '-' + Date.now().toString(36);
 const lookup = (k) => k.split('.').reduce((o, p) => (o ? o[p] : undefined), tr);
 
 // %t:key% placeholders in index.html come from tr.json (no hardcoded UI text)
