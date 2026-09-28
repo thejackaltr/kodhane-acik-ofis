@@ -22,15 +22,17 @@ async function fake(ctx) {
     const r = route.request(), u = new URL(r.url()), m = r.method();
     if (m === 'OPTIONS') return route.fulfill({ status: 200, headers: CORS, body: '' });
     const body = (() => { try { return JSON.parse(r.postData() || 'null'); } catch (e) { return null; } })();
-    f.reqs.push({ m, path: u.pathname, body });
-    const ok = (b, s = 200) => route.fulfill({ status: s, headers: CORS, body: JSON.stringify(b) });
+    let pg = null; try { pg = r.frame().page(); } catch (e) { pg = null; }
+    const entry = { m, path: u.pathname, body, pg };
+    f.reqs.push(entry);
+    const ok = (b, s = 200) => { entry.status = s; return route.fulfill({ status: s, headers: CORS, body: JSON.stringify(b) }); };
     if (u.pathname === '/rest/v1/acik_ofis_saves') {
       if (m === 'GET') return ok(f.row ? [f.row] : []);
       if (m === 'POST') {
         const cur = f.row ? f.row.revision : 0;
         if (f.row && body.revision <= cur) return ok({ code: 'PT409', message: 'stale_revision', details: null, hint: null }, 409);
         f.row = { data: body.data, save_version: body.save_version, updated_at: body.updated_at, revision: body.revision, best_score: Math.max(f.row ? f.row.best_score : 0, body.data.totalEarned || 0) };
-        return route.fulfill({ status: 201, headers: CORS, body: '' });
+        entry.status = 201; return route.fulfill({ status: 201, headers: CORS, body: '' });
       }
       return ok({ code: '42501', message: 'permission denied' }, 403);   // DELETE is revoked on the real backend
     }
@@ -129,6 +131,59 @@ for (const signedIn of [false, true]) {
     await p.keyboard.press('Escape');
   }
   check(tag + ': no page errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+// ================================================================ two tabs of one browser (signed in)
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'tr-TR' });
+  const f = await fake(ctx);
+  const save = grownSave(Date.now()); save.revision = 3;
+  f.row = { data: save, save_version: save.v || 1, updated_at: new Date().toISOString(), revision: 3, best_score: save.totalEarned };
+  await ctx.addInitScript(([s, sess]) => { if (!localStorage.getItem('seeded')) { localStorage.setItem('acik_ofis_save_v1', JSON.stringify(s)); localStorage.setItem('acik_ofis_auth_v1', sess); localStorage.setItem('seeded', '1'); } }, [save, SESSION]);
+  const errors = [];
+  const open = async () => { const p = await ctx.newPage(); p.on('pageerror', (e) => errors.push(e.message)); await p.goto(base); await ready(p); await p.evaluate(() => document.querySelectorAll('.modal .btn.primary').forEach((b) => b.click())); return p; };
+  // headless pages are all "visible": fake the tab switch (document.hidden + visibilitychange)
+  const setHidden = (p, hidden) => p.evaluate((hd) => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hd });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hd ? 'hidden' : 'visible') });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+  const tick = (p) => p.evaluate(async () => { const a = window.__acikOfis; a.ctrl.state.money += 1; a.ctrl.save(); return a.cloud.pushNow(true); });
+  const posts = (p) => f.reqs.filter((q) => q.pg === p && q.m === 'POST' && q.path === '/rest/v1/acik_ofis_saves');
+  const reads = (p) => f.reqs.filter((q) => q.pg === p && q.m === 'GET' && q.path === '/rest/v1/acik_ofis_saves');
+  const A = await open();
+  await A.waitForTimeout(800);
+  const B = await open();                                   // opened later and shown -> B is the writer
+  await B.waitForTimeout(800);
+  await setHidden(A, true);
+  let a0 = posts(A).length, b0 = posts(B).length;
+  for (let i = 0; i < 3; i++) { await tick(A); await tick(B); }
+  check('two tabs: only the visible tab writes (B)', posts(A).length === a0 && posts(B).length > b0, 'A +' + (posts(A).length - a0) + ', B +' + (posts(B).length - b0));
+  // player switches to A: B flushes once while hiding, A takes over B's save and becomes the only writer
+  await setHidden(B, true); await B.waitForTimeout(300);
+  await setHidden(A, false); await A.waitForTimeout(300);
+  const same = await Promise.all([A, B].map((p) => p.evaluate(() => { const s = window.__acikOfis.ctrl.state; return s.money + '/' + s.revision; })));
+  check('two tabs: shown tab continues the other tab\'s save', same[0] === same[1], same.join(' vs '));
+  a0 = posts(A).length; b0 = posts(B).length;
+  for (let i = 0; i < 3; i++) { await tick(A); await tick(B); }
+  check('two tabs: after the switch only A writes', posts(A).length > a0 && posts(B).length === b0, 'A +' + (posts(A).length - a0) + ', B +' + (posts(B).length - b0));
+  check('two tabs: no 409 from switching tabs', !f.reqs.some((q) => q.status === 409));
+  // another device writes -> A's next write gets 409 -> ONE read, then no write until a real input
+  f.row = Object.assign({}, f.row, { revision: f.row.revision + 1, data: Object.assign({}, f.row.data, { money: 12345, totalEarned: f.row.data.totalEarned + 1 }) });
+  const r0 = reads(A).length, p0 = posts(A).length;
+  await tick(A); await A.waitForTimeout(600);
+  const st = await A.evaluate(() => ({ money: window.__acikOfis.ctrl.state.money, held: window.__acikOfis.cloud.held, toast: [...document.querySelectorAll('.toast')].map((x) => x.textContent).join(' | ') }));
+  check('409: current save loaded once (1 read) + otherDeviceSync toast', reads(A).length === r0 + 1 && posts(A).length === p0 + 1 && st.money === 12345 && st.held && st.toast.includes('Oyuna başka bir cihazda ya da sekmede devam edildi.'), JSON.stringify(st));
+  const n = f.reqs.length;
+  for (let i = 0; i < 3; i++) { await tick(A); await tick(B); }
+  await A.waitForTimeout(1200);
+  check('409: no further requests until the player interacts', f.reqs.length === n, (f.reqs.length - n) + ' requests');
+  await A.keyboard.press('Shift');                          // a real (trusted) input event
+  const p1 = posts(A).length;
+  await tick(A); await A.waitForTimeout(300);
+  const last = posts(A).at(-1);
+  check('409: after an input the next write goes out with server revision + 1', posts(A).length === p1 + 1 && last.status === 201 && last.body.revision === f.row.revision, 'rev ' + (last && last.body.revision) + ', status ' + (last && last.status));
+  check('two tabs: no page errors', errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
 await browser.close(); if (server) server.kill();

@@ -4,6 +4,7 @@
 // state.revision = the last server revision this client has seen (guests: a local counter bumped by resets).
 // opts.ui hooks (all optional): { undoShown(pending), undoGone(), restored(), otherDevice(kind: 'reset'|'sync'), failed(key) }
 // opts.beforeReset(): e.g. cancel a pending cloud push; opts.pushNow(): write the restored save at once (real server).
+// opts.canWrite(): mock mirror allowed now (writer tab, not held); opts.onStaleWrite(): our mirror write got a 409 (hold).
 import { UNDO_MS, isStale, isBackupNotFound } from './resetApi.js';
 
 export const UNDO_KEY = 'acik_ofis_reset_undo_v1';
@@ -163,11 +164,14 @@ export class ResetFlow {
     if (!this.api.mirrors) return this.mirroring;
     const run = async () => {
       if (state !== this.ctrl.state) return;
+      if (this.opts.canWrite && !this.opts.canWrite()) return;   // background tab / held after a 409
       const now = sig(state);
       if (this.mirrorSig && now === this.mirrorSig) return;
       this.mirrorSig = null;
       const next = (state.revision || 0) + 1;
-      try { await this.api.writeSave({ data: state, revision: next }); if (state === this.ctrl.state && (state.revision || 0) < next) state.revision = next; } catch (e) { if (isStale(e)) await this.handleStale(null); }
+      try { await this.api.writeSave({ data: state, revision: next }); if (state === this.ctrl.state && (state.revision || 0) < next) state.revision = next; } catch (e) {
+        if (isStale(e)) { if (this.opts.onStaleWrite) this.opts.onStaleWrite(); await this.handleStale(null); }
+      }
     };
     this.mirroring = this.mirroring.then(run, run);
     return this.mirroring;

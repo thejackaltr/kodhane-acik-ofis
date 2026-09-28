@@ -13,6 +13,7 @@ import { createSaveApi, MockSaveServer, classify, ERR_STALE, ERR_BACKUP_NOT_FOUN
 import { ResetFlow, UNDO_KEY, staleKind } from '../../src/cloud/resetFlow.js';
 import { CloudClient, CloudSync, RPC } from '../../src/cloud/cloud.js';
 import { HoldGesture, HOLD_MS } from '../../src/ui/hold.js';
+import { TabGate, WRITER_KEY } from '../../src/cloud/tabGate.js';
 import { ajansSave } from '../smoke/grown.mjs';
 
 const T0 = Date.UTC(2026, 8, 28, 13, 0, 0);
@@ -96,10 +97,11 @@ test('revision lives in the save; old saves load with revision 0', () => {
 // ------------------------------------------------------------------ real CloudClient over a fake PostgREST
 function fakeSupabase(server) {
   const reqs = [];
-  const reply = (status, js) => new Response(js === undefined ? '' : JSON.stringify(js), { status });
   const fetch = async (url, o = {}) => {
     const u = new URL(url), body = o.body ? JSON.parse(o.body) : null, method = o.method || 'GET';
-    reqs.push({ method, path: u.pathname, search: u.search, body });
+    const entry = { method, path: u.pathname, search: u.search, body };
+    reqs.push(entry);
+    const reply = (status, js) => { entry.status = status; return new Response(js === undefined ? '' : JSON.stringify(js), { status }); };
     try {
       if (method === 'DELETE') return reply(403, { code: '42501', message: 'permission denied' });
       if (u.pathname === '/rest/v1/rpc/' + RPC.reset) return reply(200, await server.resetSave());
@@ -119,9 +121,10 @@ function signedClient() {
   return c;
 }
 // a signed-in device on the REAL transport: CloudSync (throttled pushes with revision) + flow
-async function device(clk, storage, fake) {
+async function device(clk, storage, fake, gate) {
   const ctrl = new Controller(storage, clk.now());
-  const cloud = new CloudSync(ctrl, { url: 'https://sb.test', key: 'anon' }, { saveApi: (client) => createSaveApi({ mode: 'real', client, storage: memStorage(), now: clk.now }) });
+  if (gate) ctrl.saveGate = () => gate.isWriter();
+  const cloud = new CloudSync(ctrl, { url: 'https://sb.test', key: 'anon' }, { gate, saveApi: (client) => createSaveApi({ mode: 'real', client, storage: memStorage(), now: clk.now }) });
   cloud.client.session = signedClient().session;
   const log = [];
   const flow = new ResetFlow(ctrl, cloud.saveApi, { storage, now: clk.now, setTimer: clk.setTimer, clearTimer: clk.clearTimer, beforeReset: () => cloud.cancelPending(), pushNow: () => cloud.pushNow(true), ui: hooks(log) });
@@ -411,4 +414,65 @@ test('RPC names: game-specific, defined once in cloud.js RPC, never hardcoded at
   await assert.rejects(srv.upsert({ data: { totalEarned: 1 }, revision: r.revision }), (e) => e.code === 'PT409' && e.message === 'stale_revision', 'strict after reset');
   await srv.restoreSave(r.backup_id);
   await assert.rejects(srv.upsert({ data: { totalEarned: 9 } }), (e) => e.code === 'PT409' && e.message === 'stale_revision', 'strict after restore');
+});
+
+// ------------------------------------------------------------------ one writer tab + no 409 ping-pong
+test('tab gate: the last shown/touched tab is the only writer; hidden writer only flushes; no storage = everyone writes', () => {
+  const st = memStorage(), docA = { hidden: false }, docB = { hidden: false };
+  const A = new TabGate({ storage: st, doc: docA, win: null, id: 'A' });
+  assert.equal(A.isWriter(), true);
+  const B = new TabGate({ storage: st, doc: docB, win: null, id: 'B' });   // opened later, visible -> writer
+  assert.equal(B.isWriter(), true); assert.equal(A.isWriter(), false); assert.equal(A.canPush(true), false);
+  docB.hidden = true;
+  assert.equal(B.canPush(false), false, 'hidden: no periodic push'); assert.equal(B.canPush(true), true, 'final flush allowed');
+  let claimed = 0; A.onClaim(() => claimed++);
+  assert.equal(A.claim(), true); assert.equal(claimed, 1); assert.equal(A.claim(), false, 'already the writer');
+  assert.equal(B.isWriter(), false);
+  A.release(); assert.equal(st.getItem(WRITER_KEY), null);
+  assert.equal(B.isWriter(), false, 'hidden tab does not grab a free key'); docB.hidden = false; assert.equal(B.isWriter(), true);
+  const broken = { getItem: () => { throw new Error('private'); }, setItem: () => { throw new Error('private'); }, removeItem: () => {} };
+  assert.equal(new TabGate({ storage: broken, doc: docA, win: null }).isWriter(), true);
+});
+test('two tabs, one browser: the background tab neither saves nor pushes; when shown it takes over the writer\'s save', async () => {
+  const clk = clock(), server = new MockSaveServer(memStorage(), { broadcast: false, now: clk.now });
+  const f = fakeSupabase(server); globalThis.fetch = f.fetch;
+  const st = seeded(clk), docA = { hidden: false }, docB = { hidden: false };
+  const gA = new TabGate({ storage: st, doc: docA, win: null, id: 'A' });
+  const A = await device(clk, st, f, gA);
+  const gB = new TabGate({ storage: st, doc: docB, win: null, id: 'B' });
+  const B = await device(clk, st, f, gB);
+  gB.onClaim(() => B.ctrl.adoptStored(clk.now())); gA.onClaim(() => A.ctrl.adoptStored(clk.now()));
+  clk.advance(500); docB.hidden = true; gA.claim();                 // player switches back to A: A continues B's save
+  assert.equal(A.ctrl.state.revision, B.ctrl.state.revision);
+  const posts = () => f.reqs.filter((q) => q.method === 'POST' && q.path === '/rest/v1/acik_ofis_saves').length;
+  const n = posts();
+  A.ctrl.state.money += 777; clk.advance(1000); A.ctrl.save(clk.now()); await A.cloud.pushNow(true);
+  const stored = st.getItem(S.SAVE_KEY);
+  B.ctrl.state.money = 1; clk.advance(1000);
+  assert.equal(B.ctrl.save(clk.now()), false, 'background tab does not save'); assert.equal(st.getItem(S.SAVE_KEY), stored);
+  assert.equal(await B.cloud.pushNow(true), false); assert.equal(posts(), n + 1, 'only A wrote');
+  docA.hidden = true; docB.hidden = false; gB.claim();              // player switches to B: B continues A's game
+  assert.equal(B.ctrl.state.money, A.ctrl.state.money); assert.equal(B.ctrl.state.revision, A.ctrl.state.revision);
+  assert.equal(await B.cloud.pushNow(true), true); assert.equal(await A.cloud.pushNow(true), false);
+  assert.equal(f.reqs.filter((q) => q.status === 409).length, 0);
+  A.cloud.cancelPending(); B.cloud.cancelPending();
+});
+test('409: the current save is loaded ONCE, then no write until a real input (no ping-pong between devices)', async () => {
+  const clk = clock(), server = new MockSaveServer(memStorage(), { broadcast: false, now: clk.now });
+  const f = fakeSupabase(server); globalThis.fetch = f.fetch;
+  const A = await device(clk, seeded(clk), f);
+  const B = await device(clk, seeded(clk), f);                       // B pushed rev 2; A still thinks 1
+  A.ctrl.state.money += 5;
+  const n = f.reqs.length;
+  assert.equal(await A.cloud.pushNow(true), false); await settle();
+  const after = f.reqs.slice(n).map((q) => q.method + ' ' + q.path);
+  assert.deepEqual(after, ['POST /rest/v1/acik_ofis_saves', 'GET /rest/v1/acik_ofis_saves'], 'one refused write, one read');
+  assert.equal(A.cloud.held, true); assert.deepEqual(A.log, ['otherDevice']); assert.equal(A.ctrl.state.revision, 2);
+  const m = f.reqs.length;
+  for (let i = 0; i < 3; i++) { A.ctrl.state.money += 1; A.ctrl.save(clk.now()); assert.equal(await A.cloud.pushNow(true), false); }
+  A.cloud.schedulePush(); assert.equal(A.cloud.pushTimer, null, 'no timer while held');
+  assert.equal(f.reqs.length, m, 'no request at all until the player interacts');
+  A.cloud.release(); A.cloud.cancelPending();                       // = a trusted pointerdown/keydown in the page
+  assert.equal(await A.cloud.pushNow(true), true); assert.equal((await server.pull()).revision, 3);
+  B.cloud.cancelPending();
 });

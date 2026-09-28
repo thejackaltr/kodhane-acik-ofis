@@ -157,11 +157,14 @@ export class CloudSync {
     this.saveApi = opts.saveApi ? opts.saveApi(this.client) : null;   // v2.2: resetApi facade ('real' = revision protocol on)
     this.onStale = null;     // v2.2: called with the current row { data, revision } when the server refused a stale write
     this.pushing = null;     // v2.2: pushes run one after another (never two writes with the same revision)
+    this.gate = opts.gate || null;   // v2.2: TabGate; only the visible writer tab pushes (tabGate.js)
+    this.held = false;       // v2.2: after a 409 the current save was loaded once; no push until a real player input
     ctrl.cloudHooks = { onSaved: () => this.schedulePush() };
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => { if (document.hidden) this.flush(); });
       window.addEventListener('pagehide', () => this.flush());
       window.addEventListener('online', () => { if (this.client.user && !this.reconciled) this.reconcile(); });
+      for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, (e) => { if (e.isTrusted) this.release(); }, { capture: true, passive: true });
     }
     if (this.client.user && isOnline()) this.reconcile();
   }
@@ -257,8 +260,11 @@ export class CloudSync {
     this.client.countEvent('acikofis_cloud_signup_kodhane').catch(() => {});
     return true;
   }
+  // v2.2: 409 -> hold until the player really interacts again (no automatic write, so two devices/tabs cannot ping-pong)
+  hold() { this.held = true; if (this.pushTimer) { clearTimeout(this.pushTimer); this.pushTimer = null; } }
+  release() { if (!this.held) return; this.held = false; this.schedulePush(); }
   schedulePush() {
-    if (!this.client.user || !this.reconciled || this.pushTimer) return;
+    if (!this.client.user || !this.reconciled || this.pushTimer || this.held) return;
     this.pushTimer = setTimeout(() => { this.pushTimer = null; this.pushNow(false); }, this.client.cfg.pushDelayMs);
   }
   pushNow(force, keepalive) {
@@ -269,6 +275,8 @@ export class CloudSync {
   }
   async pushOnce(force, keepalive) {
     if (!this.client.user || !this.reconciled) return false;
+    if (this.held) return false;
+    if (this.gate && !this.gate.canPush(!!keepalive)) return false;   // background / non-writer tab: paused
     const st = this.ctrl.state;
     const s = this.sig(st);
     if (!force && s === this.lastSig) return true;
@@ -277,14 +285,14 @@ export class CloudSync {
       if (this.revMode()) {
         const next = (st.revision || 0) + 1;                       // last seen server revision + 1
         await this.saveApi.writeSave({ data: st, revision: next, keepalive });
-        if (this.ctrl.state === st && (st.revision || 0) < next) st.revision = next;
+        if (this.ctrl.state === st && (st.revision || 0) < next) { st.revision = next; this.ctrl.storeQuiet(); }   // local copy knows the new revision too
       } else await this.client.push(st, keepalive);
-      this.lastSig = s; this.lastPushAt = Date.now();
+      this.lastSig = this.ctrl.state === st ? this.sig(st) : s; this.lastPushAt = Date.now();
       this.set('saved');
       return true;
     } catch (e) {
       // 409 PT409 (stale_revision / stale_write): reset/restore or a newer write elsewhere -> load it, never overwrite it
-      if (e && (e.code === 'stale' || e.status === 409 || e.code === 'PT409')) { this.lastSig = ''; this.set('saved'); if (this.onStale) this.onStale(null); return false; }
+      if (e && (e.code === 'stale' || e.status === 409 || e.code === 'PT409')) { this.hold(); this.lastSig = ''; this.set('saved'); if (this.onStale) this.onStale(null); return false; }
       if (!this.client.user) { this.reconciled = false; this.set('guest'); return false; }
       this.set('error', this.errKey(e, 'cloud.unreachable'));
       return false;

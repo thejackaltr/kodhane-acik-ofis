@@ -11,6 +11,7 @@ import { LeaderboardUI } from './cloud/leaderboard.js';
 import { createSaveApi, resolveMode } from './cloud/resetApi.js';
 import { ResetFlow } from './cloud/resetFlow.js';
 import { SAVE_KEY } from './logic/save.js';
+import { TabGate } from './cloud/tabGate.js';
 import './style.css';
 
 // Locales: every src/locales/<code>.json is picked up automatically (tr = source + fallback).
@@ -30,11 +31,15 @@ function changeLocale(code) { try { localStorage.setItem(LOCALE_KEY, code); } ca
 const DPR = Math.min(2, window.devicePixelRatio || 1);   // capped at 2
 const storage = (() => { try { return window.localStorage; } catch (e) { return { getItem: () => null, setItem: () => {}, removeItem: () => {} }; } })();
 const ctrl = new Controller(storage);
+// v2.2: only the tab the player last showed/touched writes (local + cloud); the others pause (cloud/tabGate.js)
+const gate = new TabGate({ storage });
+ctrl.saveGate = () => gate.isWriter();
 // v2.2: reset/restore only through Backend's RPC.reset / RPC.restore (cloud.js) (VITE_RESET_MOCK=1: in-browser mock; see cloud/resetApi.js)
-const cloud = new CloudSync(ctrl, null, { saveApi: (client) => createSaveApi({ mode: resolveMode(), client, storage }) });
+const cloud = new CloudSync(ctrl, null, { gate, saveApi: (client) => createSaveApi({ mode: resolveMode(), client, storage }) });
 const resetApi = cloud.saveApi;
 const cloudUi = new CloudUI(cloud);
-const resetFlow = new ResetFlow(ctrl, resetApi, { storage, beforeReset: () => cloud.cancelPending(), pushNow: () => cloud.pushNow(true), adopted: () => { cloud.lastSig = cloud.sig(ctrl.state); }, ui: {
+const resetFlow = new ResetFlow(ctrl, resetApi, { storage, beforeReset: () => cloud.cancelPending(), pushNow: () => cloud.pushNow(true), adopted: () => { cloud.lastSig = cloud.sig(ctrl.state); },
+  canWrite: () => gate.canPush(false) && !cloud.held, onStaleWrite: () => cloud.hold(), ui: {
   undoShown: (p) => ui.showUndo(p, () => resetFlow.undo()),
   undoGone: () => ui.hideUndo(),
   restored: () => ui.toast(t('reset.restored'), 'ok'),
@@ -43,8 +48,10 @@ const resetFlow = new ResetFlow(ctrl, resetApi, { storage, beforeReset: () => cl
 } });
 // 409 on a push: load the server copy; it is the cloud copy, so do not push it straight back
 cloud.onStale = (cur) => resetFlow.handleStale(cur).then((ok) => { if (ok) cloud.lastSig = cloud.sig(ctrl.state); });
-// another tab of this browser saved: if it reset/restored (newer revision), load it instead of overwriting it
-window.addEventListener('storage', (e) => { if (e.key === SAVE_KEY) ctrl.checkStale(); });
+// another tab of this browser saved: if it reset/restored (newer revision), load it instead of overwriting it.
+// A background tab ignores it: it takes over the writer's latest save when it is shown/touched again (gate.onClaim).
+window.addEventListener('storage', (e) => { if (e.key === SAVE_KEY && gate.isWriter()) ctrl.checkStale(); });
+gate.onClaim(() => { if (ctrl.adoptStored()) cloud.lastSig = ''; });
 
 const parent = document.getElementById('game');
 const size = () => ({ w: Math.max(1, parent.clientWidth), h: Math.max(1, parent.clientHeight) });
@@ -132,7 +139,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) { ctrl.save(); game.loop.sleep(); }
   else { ctrl.resume(Date.now()); game.loop.wake(); }
 });
-window.addEventListener('pagehide', () => ctrl.save());
+window.addEventListener('pagehide', () => { ctrl.save(); gate.release(); });
 
 // Welcome back on load (computed in the controller constructor)
 if (ctrl.pendingWelcome) ui.showWelcome(ctrl.pendingWelcome);

@@ -18,6 +18,7 @@ export class Controller {
     this.catTimer = 30;           // first cat nap soon after start
     this.cloudHooks = null;       // seam for cloud save: { onSaved(state) }
     this.resetting = false;
+    this.saveGate = null;         // v2.2: () => bool; false = another tab of this browser is the writer (tabGate.js)
     const loaded = SAVE.load(storage, now);
     this.state = loaded || E.newState(now);
     this.fresh = !loaded;
@@ -86,11 +87,18 @@ export class Controller {
   save(now = Date.now()) {
     if (this.resetting) return false;
     this.saveTimer = 0;
+    if (this.saveGate && !this.saveGate()) return false;   // v2.2: a background tab never overwrites the writer tab's save
     if (this.checkStale()) return false;   // v2.2: another tab reset/restored the save -> never overwrite it
     const ok = SAVE.store(this.storage, this.state, now);
     if (this.cloudHooks && this.cloudHooks.onSaved) { try { this.cloudHooks.onSaved(this.state); } catch (e) { /* cloud is optional */ } }
     this.emit('saved', this.state);
     return ok;
+  }
+  // v2.2: write the state to localStorage without the cloud hook / events (e.g. to keep the revision a push just got,
+  // so the next writer tab of this browser continues with it)
+  storeQuiet(now = Date.now()) {
+    if (this.resetting || (this.saveGate && !this.saveGate())) return false;
+    return SAVE.store(this.storage, this.state, now);
   }
   // v2.2: the stored save has a newer revision than ours (reset/undo in another tab of this browser).
   // Emits 'stale' { data, revision, source: 'local' } and returns true; the reset flow then loads it.
@@ -103,6 +111,19 @@ export class Controller {
     if (!(rev > (this.state.revision || 0))) return false;
     this.emit('stale', { data, revision: rev, source: 'local' });
     return true;
+  }
+  // v2.2: this tab just became the writer: continue from the save the previous writer tab left (newer revision, or the
+  // same revision saved later). Quiet: same player, same browser. Returns true when it loaded it.
+  adoptStored(now = Date.now()) {
+    let data = null;
+    try { data = JSON.parse(this.storage.getItem(SAVE.SAVE_KEY) || 'null'); } catch (e) { return false; }
+    if (!data || typeof data !== 'object') return false;
+    const rev = typeof data.revision === 'number' && isFinite(data.revision) ? Math.floor(data.revision) : 0, mine = this.state.revision || 0;
+    const newer = rev > mine || (rev === mine && (+data.lastSaved || 0) > (this.state.lastSaved || 0));
+    if (!newer || this.resetting) return false;
+    const before = this.state;
+    this.replaceState(data, now);
+    return this.state !== before;
   }
   // used by cloud sync when the cloud copy wins
   replaceState(obj, now = Date.now()) {
