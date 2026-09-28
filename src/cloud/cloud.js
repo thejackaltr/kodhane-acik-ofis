@@ -9,7 +9,7 @@ import { BACKUP_KEY } from '../logic/save.js';
 // every call site goes through CloudClient.resetSave/restoreSave/listBackups. Game-specific functions (the two games
 // move to separate Supabase instances), so no p_game parameter. Signatures assumed = the old reset_save/restore_save
 // minus p_game until the notes name them (reset: {}, restore: { p_backup_id }, list: {}).
-import { track } from '../analytics.js';
+import { track, counterAllowed } from '../analytics.js';
 export const RPC = Object.freeze({
   reset: 'acik_ofis_reset_save',
   restore: 'acik_ofis_restore_save',
@@ -125,8 +125,9 @@ export class CloudClient {
   async resetSave() { const tok = await this.token(); return this.api('/rest/v1/rpc/' + RPC.reset, { method: 'POST', token: tok, body: {} }); }
   async restoreSave(backupId) { const tok = await this.token(); return this.api('/rest/v1/rpc/' + RPC.restore, { method: 'POST', token: tok, body: { p_backup_id: backupId } }); }
   async listBackups() { const tok = await this.token(); return this.api('/rest/v1/rpc/' + RPC.listBackups, { method: 'POST', token: tok, body: {} }); }
-  // anonymous per-day counter on the Kodhane Supabase (anon key only, never the user token; no personal data)
-  countEvent(name) { return this.api('/rest/v1/rpc/' + this.cfg.countRpc, { method: 'POST', body: { p_event: name } }); }
+  // anonymous per-day counter on the Kodhane Supabase (anon key only, never the user token; no personal data).
+  // v2.3: gated by the "İsimsiz sayaç" consent (analytics.js GATE_SUPABASE_COUNTER): no request before "Tamam" / after "Kapat".
+  countEvent(name) { if (!counterAllowed()) return Promise.resolve(null); return this.api('/rest/v1/rpc/' + this.cfg.countRpc, { method: 'POST', body: { p_event: name } }); }
   // v2 leaderboard: guests call with the public key only; signed in, the user token lets the list flag "is_me"
   async leaderboard(limit) {
     const tok = this.session ? await this.token().catch(() => null) : null;
@@ -264,6 +265,7 @@ export class CloudSync {
   countKodhaneSignup() {
     const c = this.client.cfg;
     if (lsGet(c.referralKey) !== '1' || lsGet(c.referralCountedKey)) return false;
+    if (!counterAllowed()) return false;          // v2.3: consent off -> not sent (and not marked as counted)
     lsSet(c.referralCountedKey, '1');
     this.client.countEvent('acikofis_cloud_signup_kodhane').catch(() => {});
     return true;

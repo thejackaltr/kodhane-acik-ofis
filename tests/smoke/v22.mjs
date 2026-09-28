@@ -10,6 +10,9 @@ let base = process.argv[2], server = null;
 if (!base) { server = spawn('npx', ['vite', 'preview', '--port', '4175', '--strictPort'], { stdio: 'ignore' }); base = 'http://localhost:4175/'; await new Promise((r) => setTimeout(r, 2500)); }
 const exe = process.env.CHROME || ['/usr/bin/google-chrome', '/usr/bin/chromium'].find((p) => fs.existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+// v2.3: answer the "İsimsiz sayaç" notice ("Tamam") in every context, so the band never sits over the tested buttons
+const TEL_SEED = "try { if (!localStorage.getItem('acik_ofis_tel_notice')) { localStorage.setItem('acik_ofis_tel_notice', '1'); localStorage.setItem('acik_ofis_tel', 'on'); } } catch (e) {}";
+{ const nc = browser.newContext.bind(browser); browser.newContext = async (o) => { const c = await nc(o); await c.addInitScript(TEL_SEED); return c; }; }
 const results = [];
 function check(name, cond, info = '') { results.push(!!cond); console.log((cond ? 'PASS ' : 'FAIL ') + name + (info ? ' — ' + info : '')); }
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'content-type': 'application/json' };

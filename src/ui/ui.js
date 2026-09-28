@@ -8,6 +8,8 @@ import { hasRack } from '../logic/events.js';
 import * as G from '../logic/grid.js';
 import { openShare } from './share.js';
 import { holdButton } from './hold.js';
+import { showDetails, dismissNoticeBand } from './privacy.js';
+import { analytics } from '../analytics.js';
 
 const NAV = [['offers', '📋'], ['team', '👥'], ['office', '🏢'], ['share', '📸']];
 const pct = (x) => Math.round(x * 100);
@@ -366,10 +368,27 @@ export class UI {
           h('select', { onchange: (e) => this.opts.changeLocale && this.opts.changeLocale(e.target.value) },
             available().map((code) => { const o = h('option', { value: code, text: t('languages.' + code) }); if (code === locale()) o.selected = true; return o; }))) : null,
         h('button', { class: 'btn big', onclick: () => { close(); this.showCredits(); } }, 'ℹ️ ' + t('menu.credits')),
+        this.privacySection(close),
         restoreSlot,
         h('button', { class: 'btn big danger', 'data-test': 'menu-reset', onclick: () => { close(); this.confirmReset(); } }, t('menu.reset')),
         h('button', { class: 'btn ghost', onclick: close }, t('menu.close')));
     });
+  }
+  // v2.3: Menü > Gizlilik ("İsimsiz sayaç" switch). Shown to every player (guests too): it sits outside the signed-in
+  // restore row and the reset button. Off stops Umami + the anonymous counter at once; on resumes (loads the script if needed).
+  privacySection(close) {
+    const A = analytics();
+    const box = h('input', { type: 'checkbox', 'data-test': 'tel-toggle', checked: A.consent(), onchange: (e) => {
+      const on = e.target.checked;
+      A.setEnabled(on);              // also answers the notice if it is still open
+      dismissNoticeBand();
+      this.toast(t(on ? 'telemetry.onToast' : 'telemetry.offToast'), on ? 'ok' : '', 3500);
+    } });
+    return h('section', { class: 'menu-privacy', 'data-test': 'menu-privacy' },
+      h('h3', { text: t('menu.privacy') }),
+      h('label', { class: 'toggle-row' }, box, h('span', { text: t('menu.telemetry') })),
+      h('p', { class: 'note' }, t('menu.telemetryHint'), ' ',
+        h('button', { class: 'link', 'data-test': 'menu-tel-details', onclick: () => { close(); showDetails(this); } }, t('telemetry.detailsLink'))));
   }
   // v2.2: Yazı's fixed lists (what goes / what stays) + 2 s press-and-hold confirm. Body by resetBodyKey (guest = local only);
   // the "Kalacaklar" column and the backup line only for signed-in players ({d} = backup retention days from the cloud config). reset.countdown exists in tr.json but is not used.

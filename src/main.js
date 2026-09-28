@@ -13,7 +13,8 @@ import { ResetFlow } from './cloud/resetFlow.js';
 import { SAVE_KEY } from './logic/save.js';
 import { TabGate } from './cloud/tabGate.js';
 import './style.css';
-import { track } from './analytics.js';
+import { track, analytics } from './analytics.js';
+import { showNoticeBand, dismissNoticeBand } from './ui/privacy.js';
 
 // Locales: every src/locales/<code>.json is picked up automatically (tr = source + fallback).
 const LOCALE_KEY = 'acik_ofis_locale';
@@ -85,9 +86,25 @@ const ui = new UI(document.getElementById('ui'), ctrl, {
 
 leaderboard = new LeaderboardUI(cloud, ui);
 resetFlow.resume();   // reloaded inside the 10 s undo window -> the undo toast comes back
-// v2: anonymous stage counter (event name only; no user id, works for guests too)
+// v2: anonymous stage counter (event name only; no user id, works for guests too). v2.3: countEvent() sends nothing
+// without the "İsimsiz sayaç" consent (analytics.js GATE_SUPABASE_COUNTER).
 ctrl.on('count', (name) => { cloud.client.countEvent(name).catch(() => {}); });
 ctrl.countStage();
+
+// v2.3 "İsimsiz sayaç" notice band (first launch, until answered): above the nav, never over a button or the room. It
+// reports its height (--nb-space) so the office camera frames the room above it (padBottom + fitView); 0 when it goes.
+const PAD_BOTTOM = 90;
+let bandSpace = 0;
+function applyBandSpace() {
+  if (!scene) return;
+  scene.opts.padBottom = Math.max(PAD_BOTTOM, bandSpace ? bandSpace + 16 : 0);
+  if (scene.userAdjusted) scene.fitCamera(false); else scene.fitView();
+}
+// host = #ui (a position:fixed stacking context): the band stays under modals (z 20) and toasts (z 30), above the HUD/nav
+showNoticeBand(ui, { host: document.getElementById('ui'), onSpace: (px) => { bandSpace = px; applyBandSpace(); } });
+analytics().sync();               // consent already on: the tracker loads now; otherwise nothing is requested
+// another tab answered / switched: follow it (band gone, Umami stopped or resumed by analytics.js)
+window.addEventListener('storage', (e) => { if ((e.key === null || e.key === analytics().KEYS.notice || e.key === analytics().KEYS.pref) && !analytics().noticeNeeded()) dismissNoticeBand(); });
 
 const s0 = size();
 const game = new Phaser.Game({
@@ -102,10 +119,10 @@ const game = new Phaser.Game({
   fps: { target: 60, smoothStep: true },
   scene: new OfficeScene(ctrl, {
     dpr: DPR,
-    padTop: 96, padBottom: 90,
+    padTop: 96, padBottom: PAD_BOTTOM + bandSpace,
     onInfo: (hit) => ui.showInfo(hit),
     onPlaceFail: (reason) => reason !== 'ayni' && ui.toast(reason === 'para' ? t('place.noMoney') : t('place.bad')),
-    onReady: (sc) => { scene = sc; window.__acikOfis.scene = sc; document.body.classList.add('ready'); }
+    onReady: (sc) => { scene = sc; window.__acikOfis.scene = sc; document.body.classList.add('ready'); applyBandSpace(); }
   })
 });
 function resize() {
@@ -147,7 +164,7 @@ if (ctrl.pendingWelcome) ui.showWelcome(ctrl.pendingWelcome);
 track('game_start');
 
 // Test/debug handle (no secrets; read-only helpers + controller)
-window.__acikOfis = { ctrl, ui, cloud, leaderboard, game, resetFlow, scene: null, version: __APP_VERSION__ };
+window.__acikOfis = { ctrl, ui, cloud, leaderboard, game, resetFlow, scene: null, version: __APP_VERSION__, analytics: analytics() };
 
 // Service worker (production only): versioned cache-first; show "new version" toast.
 let updateRequested = false;

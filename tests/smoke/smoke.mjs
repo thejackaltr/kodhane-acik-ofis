@@ -44,8 +44,17 @@ async function fakeBackend(ctx) {
   await ctx.route('https://analiz.teserix.com/**', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
   return f;
 }
+// v2.3: the "İsimsiz sayaç" notice is answered with "Tamam" in every smoke context (the anonymous counter checks below
+// need consent; the band itself and the no-consent network proof are covered by tests/smoke/privacy.mjs).
+// { telemetry: 'unanswered' } leaves the notice open.
+const TEL_SEED = "try { if (!localStorage.getItem('acik_ofis_tel_notice')) { localStorage.setItem('acik_ofis_tel_notice', '1'); localStorage.setItem('acik_ofis_tel', 'on'); } } catch (e) {}";
 const newContextReal = browser.newContext.bind(browser);
-browser.newContext = async (opts) => { const c = await newContextReal(opts); c.fake = await fakeBackend(c); return c; };
+browser.newContext = async (opts = {}) => {
+  const { telemetry, ...rest } = opts;
+  const c = await newContextReal(rest); c.fake = await fakeBackend(c);
+  if (telemetry !== 'unanswered') await c.addInitScript(TEL_SEED);
+  return c;
+};
 const FAKE_SESSION = JSON.stringify({ access_token: 'fake', refresh_token: 'fake', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: '00000000-0000-0000-0000-000000000002', email: 'smoke@example.invalid' } });
 function check(name, cond, info = '') { results.push([name, !!cond]); console.log((cond ? 'PASS ' : 'FAIL ') + name + (info ? ' — ' + info : '')); }
 
@@ -598,31 +607,23 @@ for (const vp of [{ name: '390', viewport: { width: 390, height: 844 } }, { name
   await ctx.close();
 }
 
-// ================================================================ Umami (analiz.teserix.com): fake tracker + blocked tracker
+// ================================================================ Umami (analiz.teserix.com) on localhost
+// v2.3: the tracker is loaded only after consent AND only on acikofis.teserix.com / thejackaltr.github.io. On localhost it is
+// never requested, even with consent. The production-host proof (before "Tamam", after "Kapat", reload, subpath, request
+// counts) is tests/smoke/privacy.mjs.
 {
-  const FAKE = 'window.__umamiCalls = []; window.umami = { track: function () { window.__umamiCalls.push([].slice.call(arguments)); } };';
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'tr-TR' });
   const hits = [];
-  await ctx.route('https://analiz.teserix.com/**', (r) => { hits.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE }); });
-  const p = await ctx.newPage();
-  const errors = []; p.on('pageerror', (e) => errors.push(e.message));
-  await p.goto(base); await ready(p);
-  await p.waitForFunction(() => window.__umamiCalls && window.__umamiCalls.length > 0, null, { timeout: 5000 }).catch(() => {});
-  check('umami: script requested once from analiz.teserix.com', hits.filter((u) => u.endsWith('/script.js')).length === 1, JSON.stringify(hits));
-  await p.tap('[data-test=nav-share]'); await p.waitForSelector('[data-test=share-img]');
-  const calls = await p.evaluate(() => window.__umamiCalls);
-  check('umami: game_start + share_click sent, names only', JSON.stringify(calls.slice(0, 2)) === JSON.stringify([['game_start'], ['share_click']]) && calls.every((c) => c.length === 1 && typeof c[0] === 'string'), JSON.stringify(calls));
-  check('umami: no page errors', errors.length === 0, errors.join(' | '));
-  await ctx.close();
-}
-{
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'tr-TR' });
-  await ctx.route('https://analiz.teserix.com/**', (r) => r.abort('blockedbyclient'));
+  await ctx.route('https://analiz.teserix.com/**', (r) => { hits.push(r.request().url()); return r.abort('blockedbyclient'); });
   const p = await ctx.newPage();
   const errors = []; p.on('pageerror', (e) => errors.push(e.message));
   await p.goto(base); await ready(p);
   await p.tap('[data-test=nav-share]'); await p.waitForSelector('[data-test=share-img]');
-  check('umami blocked: game + share still work, no page errors', errors.length === 0 && await p.evaluate(() => typeof window.umami === 'undefined'), errors.join(' | '));
+  const st = await p.evaluate(() => { const A = window.__acikOfis.analytics; return { consent: A.consent(), host: A.hostOk(), loaded: A.loaded(), umami: typeof window.umami, log: A.log(), script: !!document.querySelector('script[data-test=umami-script]') }; });
+  check('umami (localhost, consent on): tracker never requested, no script tag', hits.length === 0 && st.consent && !st.host && !st.loaded && !st.script && st.umami === 'undefined', JSON.stringify({ hits, st }));
+  check('umami (localhost): game_start + share_click dropped (off), nothing queued', st.log.some((x) => x[0] === 'game_start' && x[1] === 'off') && st.log.some((x) => x[0] === 'share_click' && x[1] === 'off')
+    && (await p.evaluate(() => window.__acikOfis.analytics.queued().length)) === 0, JSON.stringify(st.log));
+  check('umami (localhost): game + share work, no page errors', errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
 

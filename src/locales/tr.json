@@ -374,7 +374,26 @@
     "installIos": "iPhone'da: Paylaş ▸ Ana Ekrana Ekle",
     "stats": "{p} proje · {k} kedi uykusu · toplam {v}",
     "language": "Dil",
-    "leaderboard": "Sıralama"
+    "leaderboard": "Sıralama",
+    "privacy": "Gizlilik",
+    "telemetry": "İsimsiz sayaç",
+    "telemetryHint": "[TASLAK] Seni tanıtan hiçbir bilgi gönderilmez."
+  },
+  "telemetry": {
+    "title": "İsimsiz sayaç",
+    "body": "[TASLAK] Oyunu geliştirmek için isimsiz sayım yapıyoruz. Seni tanıtan bilgi gönderilmez.",
+    "ok": "Tamam",
+    "off": "Kapat",
+    "detailsLink": "Ayrıntılar",
+    "detailsTitle": "[TASLAK] İsimsiz sayaç hakkında",
+    "details": [
+      "[TASLAK] Hangi özelliklerin kullanıldığını isimsiz olarak sayıyoruz.",
+      "[TASLAK] Adın, e-postan ya da ofis kaydın gönderilmez.",
+      "[TASLAK] İstediğin zaman Menü'deki Gizlilik bölümünden kapatabilirsin."
+    ],
+    "detailsClose": "Kapat",
+    "offToast": "[TASLAK] İsimsiz sayaç kapatıldı.",
+    "onToast": "[TASLAK] İsimsiz sayaç açıldı."
   },
   "credits": {
     "title": "Hakkında",

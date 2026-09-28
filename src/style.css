@@ -162,3 +162,38 @@ button { font: inherit; }
 .toast.undo .btn { min-height: 44px; min-width: 44px; padding: 8px 14px; }
 .toast.undo .undo-bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--accent2); transform-origin: left center; animation: undo-bar linear forwards; }
 @keyframes undo-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+/* v2.3: "İsimsiz sayaç" notice band + Menü > Gizlilik. The unanswered band must never cover a button or the room:
+   ui/privacy.js measures it and keeps --nb-space on <html> (band top edge -> viewport bottom + 8px, nav + safe area
+   included); main.js also raises the office camera's padBottom. Hint, placement bar and sheets sit above the band.
+   Without the variable (no band) everything is as before. */
+.notice-band { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(74px + var(--safe-b)); z-index: 15; width: min(calc(100vw - 16px), 900px); background: var(--panel); color: var(--ink); border: 2px solid var(--accent2); border-radius: 16px; padding: 8px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.4); display: flex; align-items: center; gap: 12px; }
+.nb-text { margin: 0; flex: 1; min-width: 0; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+.nb-row { display: flex; gap: 8px; align-items: center; flex: none; }
+.notice-band .nb-btn { flex: 0 0 6.5em; min-height: 44px; padding: 8px 10px; }      /* "Tamam" and "Kapat": exactly the same size */
+.notice-band .nb-link { min-height: 44px; padding: 0 6px; }
+body:has(.notice-band) .hint { bottom: var(--nb-space, 200px); }
+body:has(.notice-band) .placebar { bottom: var(--nb-space, 200px); }
+body:has(.notice-band) .placebar:not(.hidden) ~ .hint, body:has(.notice-band) .hint:has(~ .placebar:not(.hidden)) { bottom: calc(var(--nb-space, 200px) + 64px); }
+body:has(.notice-band) .sheet { bottom: var(--nb-space, 200px); max-height: min(62vh, 560px, calc(100vh - var(--nb-space, 200px) - 64px - var(--safe-t))); }
+body:has(.notice-band) #ui:has(.sheet:not(.hidden)) .hint { bottom: auto; }
+/* a tutorial hint sits at the top while a sheet is open: keep the sheet below it (small phones with the band) */
+body:has(.notice-band) #ui:has(.sheet:not(.hidden)):has(.hint:not(.hidden)) .sheet { max-height: min(62vh, 560px, calc(100vh - var(--nb-space, 200px) - 150px - var(--safe-t))); }
+@media (max-width: 700px) {
+  .notice-band { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 10px; }
+  .nb-row { flex-wrap: wrap; }
+  .notice-band .nb-btn { flex: 1 1 0; min-width: 0; }
+}
+/* short screens (landscape phones): one row, same text and same buttons, smaller type */
+@media (max-height: 520px) {
+  .notice-band { flex-direction: row; align-items: center; padding: 4px 8px; gap: 8px; bottom: calc(72px + var(--safe-b)); }
+  .nb-text { font-size: 12px; line-height: 1.25; }
+  .nb-row { flex-wrap: nowrap; gap: 6px; }
+  .notice-band .nb-btn { flex: 0 0 5.4em; min-height: 36px; padding: 4px 8px; }
+  .notice-band .nb-link { min-height: 36px; }
+}
+.menu-privacy { border-top: 1px solid #e2cfbd; border-bottom: 1px solid #e2cfbd; padding: 4px 0 2px; margin: 4px 0; }
+.menu-privacy h3 { margin: 6px 4px 2px; font-size: 15px; }
+.toggle-row { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 650; padding: 0 4px; cursor: pointer; }
+.toggle-row input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+.menu-privacy .note .link { min-height: 32px; padding: 0 2px; }
+.modal.tel-details .tel-p { font-size: 14px; color: var(--ink); }

@@ -47,6 +47,13 @@ test('Kodhane referral: remembered from utm_source=kodhane, counted once on firs
   const ctrl = { state: { lastSaved: 1 }, save() {}, replaceState() {} };
   const cs = new CloudSync(ctrl, { url: 'https://example.invalid' });
   cs.client.countEvent = (name) => { calls.push(name); return Promise.resolve(true); };
+  // v2.3: the referral count follows the "İsimsiz sayaç" consent (GATE_SUPABASE_COUNTER): not answered / "Kapat" -> no
+  // request and not marked as counted
+  assert.equal(cs.countKodhaneSignup(), false, 'no consent -> not counted');
+  store.acik_ofis_tel_notice = '1'; store.acik_ofis_tel = 'off';
+  assert.equal(cs.countKodhaneSignup(), false, '"Kapat" -> not counted');
+  assert.deepEqual(calls, []); assert.equal(store.acik_ofis_kodhane_signup_counted, undefined);
+  store.acik_ofis_tel = 'on';
   assert.equal(cs.countKodhaneSignup(), true);
   assert.equal(cs.countKodhaneSignup(), false, 'only once');
   assert.deepEqual(calls, ['acikofis_cloud_signup_kodhane']);

@@ -43,6 +43,7 @@ npm run dev        # geliştirme sunucusu
 npm test           # mantık modülleri için birim testleri (node:test)
 npm run build      # dist/ (GitHub Actions bununla Pages'e yayınlar)
 npm run smoke      # başsız Chrome: mobil 390×844 + masaüstü 1280×800, ekran görüntüleri screenshots/ altına
+npm run smoke:privacy  # v2.3 isimsiz sayaç: izin yokken / Kapat sonrası Umami ve anonim sayaca 0 istek (kök yol + /kodhane-acik-ofis/), bant yerleşimi, Menü > Gizlilik (önce npm run build)
 npm run atlas      # çizimleri yeniden üret (tools/atlas/art.js -> public/assets/atlas.png/json, ikonlar, src/data/mobilya.json)
 npm run balance    # kaba tempo simülasyonu
 ```
