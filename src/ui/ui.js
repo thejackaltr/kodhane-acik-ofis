@@ -16,7 +16,7 @@ export function staffDesc(type) { const d = STAFF[type] || {}; return tp('staff.
 const ITEM_IC = { kahve: '☕', bitki: '🪴', sunucu: '🗄️' };
 export function itemEffect(type) { const d = ITEMS[type]; return t('items.' + type + '.effect', { n: pct(d.speed || d.reward || 0) }); }
 
-// v2.2: guests have no cloud save or backup -> a body without cloud/backup words (reset.bodyGuest, temporary until Yazı approves)
+// v2.2: guests have no cloud save or backup -> a body without cloud/backup words (reset.bodyGuest, Yazı)
 export const resetBodyKey = (signedIn) => (signedIn ? 'reset.body' : 'reset.bodyGuest');
 
 export class UI {
@@ -372,14 +372,14 @@ export class UI {
     });
   }
   // v2.2: Yazı's fixed lists (what goes / what stays) + 2 s press-and-hold confirm. Body by resetBodyKey (guest = local only);
-  // the backup line only for signed-in players ({d} = backup retention days from the cloud config). reset.countdown exists in tr.json but is not used.
+  // the "Kalacaklar" column and the backup line only for signed-in players ({d} = backup retention days from the cloud config). reset.countdown exists in tr.json but is not used.
   confirmReset() {
     const ctx = this.opts.resetContext ? this.opts.resetContext() : {};
     const col = (cls, test, title, items) => h('section', { class: 'reset-col ' + cls, 'data-test': test }, h('h3', { text: t(title) }), h('ul', null, items.map((x) => h('li', { text: x }))));
     this.showModal((box, close) => {
       const btn = holdButton({ label: t('reset.hold'), test: 'reset-hold', onConfirm: () => { close(); this.opts.onReset && this.opts.onReset(); } });
       add(box, h('h2', { text: t('reset.title') }), h('p', { 'data-test': 'reset-body', text: t(resetBodyKey(ctx.signedIn)) }),
-        h('div', { class: 'reset-cols' }, col('del', 'reset-delete', 'reset.lostTitle', list('reset.lost')), col('keep', 'reset-keep', 'reset.keptTitle', list('reset.kept'))),
+        h('div', { class: 'reset-cols' + (ctx.signedIn ? '' : ' single') }, col('del', 'reset-delete', 'reset.lostTitle', list('reset.lost')), ctx.signedIn ? col('keep', 'reset-keep', 'reset.keptTitle', list('reset.kept')) : null),
         ctx.signedIn ? h('p', { class: 'note', 'data-test': 'reset-backup', text: t('reset.backup', { d: ctx.backupDays }) }) : null,
         btn,
         h('button', { class: 'btn ghost', autofocus: true, 'data-test': 'reset-cancel', onclick: close }, t('reset.cancel')));

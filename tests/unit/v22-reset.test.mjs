@@ -15,7 +15,7 @@ import { CloudClient, CloudSync, RPC } from '../../src/cloud/cloud.js';
 import { HoldGesture, HOLD_MS } from '../../src/ui/hold.js';
 import { TabGate, WRITER_KEY } from '../../src/cloud/tabGate.js';
 import { ajansSave } from '../smoke/grown.mjs';
-import { resetBodyKey } from '../../src/ui/ui.js';
+import { resetBodyKey, UI } from '../../src/ui/ui.js';
 
 const T0 = Date.UTC(2026, 8, 28, 13, 0, 0);
 const tr = JSON.parse(fs.readFileSync(new URL('../../src/locales/tr.json', import.meta.url)));
@@ -382,7 +382,7 @@ test('confirm dialog copy: Yazı\'s fixed lists (no achievements in Açık Ofis)
   for (const k of ['title', 'body', 'lostTitle', 'keptTitle', 'hold', 'countdown', 'cancel', 'done', 'undo', 'restored', 'restoreYes', 'otherDevice', 'otherDeviceSync', 'undoExpired', 'failed'])
     assert.equal(typeof I.raw('reset.' + k), 'string', k);
   for (const k of ['holdHint', 'deleteTitle', 'keepTitle', 'del', 'keep']) assert.equal(I.raw('reset.' + k), undefined, 'placeholder removed: ' + k);
-  assert.match(I.raw('reset._gecici'), /reset\.bodyGuest/, 'temporary marker names only reset.bodyGuest (remove when Yazı approves)');
+  assert.equal(I.raw('reset._gecici'), undefined, 'temporary marker removed (Yazı approved reset.bodyGuest)');
   assert.deepEqual([I.t('reset.undoExpired'), I.t('reset.failed'), I.t('reset.otherDeviceSync'), I.t('reset.restoreRow'), I.t('reset.restoreFailed')], [
     'Geri alma süresi doldu.', 'Ofis şu an sıfırlanamadı. Bağlantını kontrol edip tekrar dene.',
     'Oyuna başka bir cihazda ya da sekmede devam ettin. Güncel kayıt yüklendi.', 'Son yedeği geri yükle',
@@ -402,6 +402,48 @@ test('confirm dialog body: guests get a local-only body (no cloud/backup words),
   assert.match(signed, /bulut/);
   const ui = fs.readFileSync(new URL('../../src/ui/ui.js', import.meta.url), 'utf8');
   assert.equal(ui.includes("t('reset.body')"), false, 'dialog body goes through resetBodyKey');
+});
+// minimal fake DOM: enough for h()/add()/holdButton() to render the confirm dialog in node
+function fakeDocument() {
+  const mk = (tag) => {
+    const el = { tag, kids: [], attrs: {}, style: {}, className: '', _text: null, listeners: {},
+      classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+      setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
+      addEventListener(k, f) { this.listeners[k] = f; }, removeEventListener() {},
+      appendChild(c) { this.kids.push(c); return c; }, append(...cs) { for (const c of cs) this.kids.push(typeof c === 'string' ? mkText(c) : c); } };
+    Object.defineProperty(el, 'textContent', { get() { return this._text != null ? this._text : this.kids.map((k) => k.textContent).join(''); }, set(v) { this._text = String(v); this.kids = []; } });
+    return el;
+  };
+  const mkText = (v) => ({ tag: '#text', kids: [], attrs: {}, textContent: v });
+  return { createElement: mk, createTextNode: mkText };
+}
+function renderReset(ctx) {
+  const prev = globalThis.document; globalThis.document = fakeDocument();
+  try {
+    const box = document.createElement('div');
+    UI.prototype.confirmReset.call({ opts: { resetContext: () => ctx }, showModal: (render) => render(box, () => {}) });
+    const all = []; (function walk(n) { all.push(n); (n.kids || []).forEach(walk); })(box);
+    const q = (test) => all.find((n) => n.attrs && n.attrs['data-test'] === test) || null;
+    const sec = (test) => { const n = q(test); return n ? { title: n.kids.find((k) => k.tag === 'h3').textContent, items: n.kids.find((k) => k.tag === 'ul').kids.map((li) => li.textContent) } : null; };
+    return { body: q('reset-body').textContent, del: sec('reset-delete'), keep: sec('reset-keep'), backup: q('reset-backup') && q('reset-backup').textContent, text: box.textContent, cols: all.find((n) => /reset-cols/.test(n.className)).className };
+  } finally { globalThis.document = prev; }
+}
+test('confirm dialog render: guests see no "Kalacaklar" section (title + list) and no backup line; signed-in unchanged', () => {
+  const KEEP = ['Tüm Zamanlar puanın ve sıran', 'Takma adın', 'Kodhane hesabın'], LOST = ['Kasa ve kazanç', 'Ekip ve masalar', 'Eşyalar ve geliştirmeler', 'Aşama ilerlemen'];
+  const g = renderReset({ signedIn: false, backupDays: 30 });
+  assert.equal(g.keep, null, 'no reset-keep section for guests');
+  assert.equal(g.text.includes(I.t('reset.keptTitle')), false, 'keptTitle not rendered for guests');
+  for (const k of KEEP) assert.equal(g.text.includes(k), false, 'kept item not rendered for guests: ' + k);
+  assert.equal(g.backup, null);
+  assert.equal(g.body, 'Ofisin sıfırdan başlar. Bu cihazdaki kaydın silinir.');
+  assert.deepEqual(g.del, { title: 'Silinecekler', items: LOST }, 'guests still see what goes');
+  assert.match(g.cols, /\bsingle\b/, 'one-column layout for guests');
+  const s = renderReset({ signedIn: true, backupDays: 30 });
+  assert.deepEqual(s.keep, { title: 'Kalacaklar', items: KEEP }, 'signed-in: same title, same items, same order');
+  assert.deepEqual(s.del, { title: 'Silinecekler', items: LOST });
+  assert.equal(s.body, 'Ofisin sıfırdan başlar. Bu cihazdaki ve buluttaki kaydın değişir.');
+  assert.equal(s.backup, 'Eski kaydın 30 gün saklanır, bu sürede geri yükleyebilirsin.');
+  assert.doesNotMatch(s.cols, /\bsingle\b/);
 });
 test('otherDevice split: a later game start (reset) vs the same game played elsewhere (sync)', () => {
   const mine = { startedAt: T0 };

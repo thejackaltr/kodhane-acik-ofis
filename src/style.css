@@ -151,6 +151,7 @@ button { font: inherit; }
 .btn.hold.holding { border-color: #7a1a1a; }
 .btn.hold:focus-visible { outline: 3px solid var(--accent2); outline-offset: 2px; }
 .reset-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
+.reset-cols.single { grid-template-columns: 1fr; }   /* guests: no "Kalacaklar" column */
 .reset-col { border-radius: 12px; padding: 8px 10px; }
 .reset-col h3 { margin: 0 0 4px; font-size: 15px; }
 .reset-col ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }

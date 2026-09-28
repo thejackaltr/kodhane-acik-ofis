@@ -482,7 +482,6 @@
     "s4": "Kodhane: Açık Ofis. Tarayıcıda ve telefonda oyna."
   },
   "reset": {
-    "_gecici": "GEÇİCİ METİN: reset.bodyGuest (misafir için, bulut/yedek/hesap sözü yok) Yazı'nın onayını bekliyor (v2.2). Diğer reset.* metinleri Yazı'nındır.",
     "title": "Baştan başlamak istiyor musun?",
     "body": "Ofisin sıfırdan başlar. Bu cihazdaki ve buluttaki kaydın değişir.",
     "bodyGuest": "Ofisin sıfırdan başlar. Bu cihazdaki kaydın silinir.",
