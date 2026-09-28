@@ -174,3 +174,13 @@ test('[counter] cloud save / login do not depend on consent (consent off, signed
   assert.equal(f.reqs.some((q) => q.path === '/rest/v1/rpc/kodhane_count_event'), false);
   D.cloud.cancelPending();
 });
+
+test('[copy] approved final "İsimsiz sayaç" copy in tr.json, character for character; no [TASLAK]; reset.kept untouched', () => {
+  const trj = JSON.parse(fs.readFileSync(new URL('../../src/locales/tr.json', import.meta.url), 'utf8'));
+  const fx = JSON.parse(fs.readFileSync(new URL('../fixtures/telemetry-copy.json', import.meta.url), 'utf8'));
+  assert.deepEqual(trj.telemetry, fx.telemetry);
+  assert.deepEqual({ privacy: trj.menu.privacy, telemetry: trj.menu.telemetry, telemetryHint: trj.menu.telemetryHint }, fx.menu);
+  assert.ok(!/TASLAK/.test(JSON.stringify(trj)));
+  assert.ok(trj.telemetry.details[3].includes('“Tamam” dedikten') && trj.telemetry.details[3].includes("Menü'deki (☰) Gizlilik"));
+  assert.deepEqual(trj.reset.kept, ['Tüm Zamanlar puanın ve sıran', 'Takma adın', 'Kodhane hesabın']);
+});
