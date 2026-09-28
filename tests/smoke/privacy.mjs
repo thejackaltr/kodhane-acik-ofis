@@ -303,6 +303,17 @@ for (const [vname, vp] of VIEWPORTS) {
   await p.click('[data-test=tel-details]'); await p.waitForSelector('[data-test=tel-details-close]');
   const dbtn = await p.evaluate(VIS, '[data-test=tel-details-close]');
   check(tag + ' details open from the band (notice still pending), Kapat reachable', (await p.evaluate(() => localStorage.getItem('acik_ofis_tel_notice'))) === null && dbtn.length === 1 && !failing(dbtn).length, JSON.stringify(dbtn));
+  await p.evaluate(() => { document.querySelector('.modal.tel-details, .tel-details').scrollTop = 0; });
+  await p.waitForTimeout(350);
+  const sc = await p.evaluate(() => { const m = document.querySelector('.modal-wrap .modal'); const r = m.getBoundingClientRect(); return { scrollable: m.scrollHeight > m.clientHeight + 1, fits: r.top >= -0.5 && r.bottom <= innerHeight + 0.5 }; });
+  check(tag + ' details: dialog fits the screen (' + (sc.scrollable ? 'scrolls' : 'no scroll needed') + ')', sc.fits, JSON.stringify(sc));
+  await p.screenshot({ path: path.join(shots, 'acikofis-details-' + vname + '.png') });
+  await p.evaluate(() => { const m = document.querySelector('.modal-wrap .modal'); m.scrollTop = m.scrollHeight; });
+  await p.waitForTimeout(200);
+  const lastP = await p.evaluate(VIS, '.modal-wrap .modal p:last-of-type');
+  const dbtn2 = await p.evaluate(VIS, '[data-test=tel-details-close]');
+  check(tag + ' details: scrolled to the end, last paragraph + Kapat visible and on top', lastP.length >= 1 && lastP[lastP.length - 1].inside && dbtn2.length === 1 && !failing(dbtn2).length, JSON.stringify([lastP, dbtn2]));
+  if (sc.scrollable) await p.screenshot({ path: path.join(shots, 'acikofis-details-' + vname + '-scrolled.png') });
   const over = await p.evaluate(() => { const r = document.querySelector('[data-test=tel-banner]').getBoundingClientRect(); const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { inUi: !!document.querySelector('#ui > [data-test=tel-banner]'), hitBand: !!(e && e.closest('[data-test=tel-banner]')) }; });
   check(tag + ' band lives in #ui and an open modal covers it (modals/toasts stay on top)', over.inUi && !over.hitBand, JSON.stringify(over));
   await p.click('[data-test=tel-details-close]'); await p.waitForTimeout(200);
