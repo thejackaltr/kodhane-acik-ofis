@@ -1,15 +1,23 @@
 /*
  * v2.2 "Baştan başla" — save / reset / restore transport with the server `revision` rule.
  *
- * FOLLOWS THE BACKEND CONTRACT: docs/v2.2-backend-client-notes.md + supabase/migrations/20260928160000_v2_2_save_safety.sql
- * (branch v2.2-backend, 1392c49). Summary of what this client relies on:
- *  - acik_ofis_saves has `revision bigint` (+ server-managed `best_score`, `strict_revision`; client may only read them).
- *  - Save write = the existing REST upsert (POST /rest/v1/acik_ofis_saves?on_conflict=user_id) with body
- *    { user_id, data, save_version, updated_at, revision } where revision = last seen server revision + 1.
- *    Success -> last seen = sent. The client also puts the same number in data.revision (local saves / other tabs).
- *  - Stale write -> HTTP 409, code "PT409", message "stale_revision" (revision < server, or = server once the row is
- *    strict) or "stale_write" (legacy write without a new revision that would lower totalEarned).
- *    On 409 the client re-reads the row, loads it (never overwrites it) and shows reset.otherDevice.
+ * FOLLOWS THE BACKEND CONTRACT: docs/v2.2-backend-client-notes.md + supabase/migrations/20260928160100_v2_2_acik_ofis_save_safety.sql
+ * (branch v2.2-backend, 871876f). Summary of what this client relies on:
+ *  - acik_ofis_saves has `revision bigint` (+ server-only `best_score`, `best_stage`, `strict_revision`; read-only here).
+ *  - Save write = the REST upsert POST /rest/v1/acik_ofis_saves?on_conflict=user_id&select=revision with
+ *    Prefer: resolution=merge-duplicates,return=representation and body { user_id, data, save_version, updated_at, revision },
+ *    revision = L + 1 (L = last server revision seen). Success -> L = the revision the server RETURNS (not "sent"):
+ *    on a lenient row an old client may have written between our pull and push; our equal revision is then accepted
+ *    as old + 1 and we would otherwise stay one behind forever (notes, risk 1). The same number goes into data.revision.
+ *  - Server rule (trigger), "old" = the row's revision:
+ *      no row (INSERT)                                   -> accepted, revision = sent (or 0); sent > 0 -> row strict
+ *      revision < old                                    -> 409 PT409 stale_revision (always)
+ *      revision = old (or none sent), row strict / revision_mode 'strict' -> 409 PT409 stale_revision
+ *      revision = old, lenient row, totalEarned not lower -> accepted, server writes old + 1, row STAYS lenient
+ *      revision = old, lenient row, totalEarned lower    -> 409 PT409 stale_write
+ *      revision > old (any gap)                          -> accepted, row becomes strict for good
+ *    Reset and restore update the row with old + 1 (restore without a row: backup revision + 1) -> strict too.
+ *    On 409 the client re-reads the row once, loads it (never overwrites it) and shows reset.otherDevice(Sync).
  *  - RPC names: game-specific, kept only in cloud.js `RPC` (reset = acik_ofis_reset_save, restore = acik_ofis_restore_save).
  *  - Reset:   POST /rest/v1/rpc/<RPC.reset>   {} -> { revision, backup_id, best_score, best_stage }
  *             Row is not deleted: backup taken, progress cleared server-side, revision + 1. No row yet -> revision 0,
@@ -79,6 +87,7 @@ export class MockSaveServer {
     this.now = opts.now || (() => Date.now());
     this.strictMode = !!opts.strict;        // game_config revision_mode.acik_ofis = 'strict'
     this.retentionMs = (opts.retentionDays || 30) * 86400e3;   // game_config backup_retention_days
+    this.maxBackups = opts.maxBackups || 50;                    // game_config backup_max_per_user_game
     this.listeners = []; this.channel = null;
     const useBc = opts.broadcast !== undefined ? opts.broadcast : typeof window !== 'undefined';
     if (useBc && typeof BroadcastChannel !== 'undefined') {
@@ -100,7 +109,7 @@ export class MockSaveServer {
   subscribe(fn) { this.listeners.push(fn); return () => { this.listeners = this.listeners.filter((f) => f !== fn); }; }
   close() { if (this.channel) { try { this.channel.close(); } catch (e) { /* ignore */ } this.channel = null; } }
   // GET row
-  async pull() { const r = this.load().row; return r ? { data: r.data, save_version: r.data && r.data.v || 1, updated_at: new Date(r.updatedAt).toISOString(), revision: r.revision, best_score: r.best } : null; }
+  async pull() { const r = this.load().row; return r ? { data: r.data, save_version: r.data && r.data.v || 1, updated_at: new Date(r.updatedAt).toISOString(), revision: r.revision, best_score: r.best, best_stage: r.bestStage || 0 } : null; }
   // upsert + trigger save_before_write
   async upsert({ data, revision }) {
     const s = this.load(), t = this.now(), clone = data ? JSON.parse(JSON.stringify(data)) : null;
@@ -128,6 +137,7 @@ export class MockSaveServer {
     if (!s.row) return { revision: 0, backup_id: null, best_score: 0, best_stage: 0 };
     const id = uuid();
     s.backups.unshift({ id, revision: s.row.revision, payload: s.row.data, best: s.row.best, bestStage: s.row.bestStage || 0, reason: 'reset', createdAt: t });
+    this.trim(s, t);
     s.row = Object.assign({}, s.row, { data: resetPayload(s.row.data, t), revision: s.row.revision + 1, strict: true, updatedAt: t });
     this.store(s, true);
     return { revision: s.row.revision, backup_id: id, best_score: s.row.best, best_stage: s.row.bestStage || 0 };
@@ -140,6 +150,7 @@ export class MockSaveServer {
     if (s.row) {
       bid = uuid();
       s.backups.unshift({ id: bid, revision: s.row.revision, payload: s.row.data, best: s.row.best, bestStage: s.row.bestStage || 0, reason: 'restore', createdAt: t });
+      this.trim(s, t);
       rev = s.row.revision + 1;
       s.row = Object.assign({}, s.row, { data: b.payload, revision: rev, strict: true, updatedAt: t });
     } else {
@@ -149,6 +160,8 @@ export class MockSaveServer {
     this.store(s, true);
     return { revision: rev, backup_id: bid, restored_from: b.id, best_score: s.row.best, best_stage: s.row.bestStage || 0 };
   }
+  // acik_ofis_save_backups_trim: expired ones and everything over the cap (oldest first) go
+  trim(s, t) { s.backups = s.backups.filter((b) => b.createdAt > t - this.retentionMs).sort((a, b) => b.createdAt - a.createdAt).slice(0, this.maxBackups); }
   // rpc RPC.listBackups (same columns as the SQL)
   async listBackups() {
     const t = this.now();
@@ -177,11 +190,12 @@ export function createSaveApi({ mode = resolveMode(), client = null, storage, no
     restoreSave({ backupId }) {
       return wrap((mock ? mock.restoreSave(backupId) : client.restoreSave(backupId)).then((js) => ({ revision: n0(js && js.revision), restoredFrom: js && js.restored_from })));
     },
-    // revision = last seen + 1 (the caller decides); data.revision is set to the same number
+    // revision = last seen + 1 (the caller decides); data.revision is set to the same number. Resolves to the revision
+    // the server stored (return=representation, select=revision): the caller's new "last seen".
     writeSave({ data, revision, keepalive }) {
       const body = Object.assign({}, data, { revision });
       if (!Array.isArray(body.desks) || !body.desks.length) return Promise.reject(new Error('empty save refused'));   // resets go through RPC.reset only
-      return wrap((mock ? mock.upsert({ data: body, revision }) : client.push(body, keepalive, revision).then(() => ({ revision }))));
+      return wrap((mock ? mock.upsert({ data: body, revision }) : client.push(body, keepalive, revision).then((r) => ({ revision: r && r.revision != null ? r.revision : revision }))));
     },
     // RPC.listBackups: own non-expired backups, newest first
     listBackups() {

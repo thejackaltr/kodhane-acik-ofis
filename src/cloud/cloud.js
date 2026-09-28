@@ -100,19 +100,25 @@ export class CloudClient {
     return Array.isArray(rows) && rows.length ? rows[0] : null;
   }
   // upsert of the player's row. v2.2: revision (= last seen server revision + 1) goes into the row; the server
-  // refuses older/equal ones with 409 PT409 stale_revision / stale_write. Never DELETE, never an empty save on reset.
+  // refuses older/equal ones with 409 PT409 stale_revision / stale_write (lenient rows: see the table in resetApi.js). Never DELETE, never an empty save on reset.
   async push(data, keepalive, revision) {
     if (!data || typeof data !== 'object' || !Array.isArray(data.desks) || !data.desks.length) throw new Error('empty save refused');   // resets go through RPC.reset only
     const tok = await this.token();
     const now = new Date().toISOString();
     const body = { user_id: this.user.id, data, save_version: data.v || 1, updated_at: now };
     if (revision != null) body.revision = revision;
-    await this.api('/rest/v1/' + this.cfg.table + '?on_conflict=user_id', {
+    // v2.2 (revision given): return=representation + select=revision -> the revision the SERVER stored comes back.
+    // On a lenient row an equal revision is accepted as old + 1 (an old client wrote between our pull and push), so the
+    // caller must take this value instead of assuming "sent" (Backend notes, risk 1). Legacy push: return=minimal.
+    const rev = revision != null;
+    const js = await this.api('/rest/v1/' + this.cfg.table + '?on_conflict=user_id' + (rev ? '&select=revision' : ''), {
       method: 'POST', token: tok, keepalive,
-      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      headers: { Prefer: 'resolution=merge-duplicates,return=' + (rev ? 'representation' : 'minimal') },
       body
     });
-    return now;
+    if (!rev) return now;
+    const r = Array.isArray(js) ? js[0] : js;
+    return { at: now, revision: r && Number.isFinite(+r.revision) ? Math.floor(+r.revision) : null };
   }
   // v2.2 Backend RPCs (SECURITY DEFINER, auth.uid()): reset keeps the row (backup + revision + 1), restore brings a backup back
   async resetSave() { const tok = await this.token(); return this.api('/rest/v1/rpc/' + RPC.reset, { method: 'POST', token: tok, body: {} }); }
@@ -284,8 +290,9 @@ export class CloudSync {
     try {
       if (this.revMode()) {
         const next = (st.revision || 0) + 1;                       // last seen server revision + 1
-        await this.saveApi.writeSave({ data: st, revision: next, keepalive });
-        if (this.ctrl.state === st && (st.revision || 0) < next) { st.revision = next; this.ctrl.storeQuiet(); }   // local copy knows the new revision too
+        const res = await this.saveApi.writeSave({ data: st, revision: next, keepalive });
+        const got = res && Number.isFinite(res.revision) ? res.revision : next;   // L = what the server stored (may be > next)
+        if (this.ctrl.state === st && st.revision !== got) { st.revision = got; this.ctrl.storeQuiet(); }   // local copy knows it too
       } else await this.client.push(st, keepalive);
       this.lastSig = this.ctrl.state === st ? this.sig(st) : s; this.lastPushAt = Date.now();
       this.set('saved');

@@ -169,7 +169,7 @@ export class ResetFlow {
       if (this.mirrorSig && now === this.mirrorSig) return;
       this.mirrorSig = null;
       const next = (state.revision || 0) + 1;
-      try { await this.api.writeSave({ data: state, revision: next }); if (state === this.ctrl.state && (state.revision || 0) < next) state.revision = next; } catch (e) {
+      try { const r = await this.api.writeSave({ data: state, revision: next }); if (state === this.ctrl.state) state.revision = r && Number.isFinite(r.revision) ? r.revision : next; } catch (e) {
         if (isStale(e)) { if (this.opts.onStaleWrite) this.opts.onStaleWrite(); await this.handleStale(null); }
       }
     };

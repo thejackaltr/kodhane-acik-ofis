@@ -17,7 +17,21 @@ const USER = '00000000-0000-0000-0000-000000000002';
 const SESSION = JSON.stringify({ access_token: 'fake', refresh_token: 'fake', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: USER, email: 'smoke@example.invalid' } });
 
 async function fake(ctx) {
-  const f = { row: null, reqs: [], backups: [] };
+  const f = { row: null, reqs: [], backups: [], beforePost: null };
+  // the trigger's revision rule (Backend notes table): lenient rows accept an equal revision as old + 1
+  f.write = (b) => {
+    const score = (d) => (d && +d.totalEarned) || 0, sent = b.revision == null ? null : b.revision;
+    const next = (rev, strict) => { f.row = { data: b.data, save_version: b.save_version, updated_at: b.updated_at, revision: rev, strict, best_score: Math.max(f.row ? f.row.best_score : 0, score(b.data)) }; return {}; };
+    if (!f.row) return next(sent || 0, (sent || 0) > 0);
+    const old = f.row.revision, rev = sent == null ? old : sent;
+    if (rev < old) return { error: 'stale_revision' };
+    if (rev === old) {
+      if (f.row.strict !== false) return { error: 'stale_revision' };
+      if (score(b.data) < score(f.row.data)) return { error: 'stale_write' };
+      return next(old + 1, false);
+    }
+    return next(rev, true);
+  };
   await ctx.route('https://supabase.teserix.com/**', async (route) => {
     const r = route.request(), u = new URL(r.url()), m = r.method();
     if (m === 'OPTIONS') return route.fulfill({ status: 200, headers: CORS, body: '' });
@@ -29,21 +43,23 @@ async function fake(ctx) {
     if (u.pathname === '/rest/v1/acik_ofis_saves') {
       if (m === 'GET') return ok(f.row ? [f.row] : []);
       if (m === 'POST') {
-        const cur = f.row ? f.row.revision : 0;
-        if (f.row && body.revision <= cur) return ok({ code: 'PT409', message: 'stale_revision', details: null, hint: null }, 409);
-        f.row = { data: body.data, save_version: body.save_version, updated_at: body.updated_at, revision: body.revision, best_score: Math.max(f.row ? f.row.best_score : 0, body.data.totalEarned || 0) };
-        entry.status = 201; return route.fulfill({ status: 201, headers: CORS, body: '' });
+        if (f.beforePost) { const h = f.beforePost; f.beforePost = null; h(); }   // e.g. an old client writes first
+        const res = f.write(body);
+        if (res.error) return ok({ code: 'PT409', message: res.error, details: null, hint: null }, 409);
+        entry.status = 201;
+        const rep = /return=representation/.test(r.headers()['prefer'] || '') && u.searchParams.get('select') === 'revision';
+        return route.fulfill({ status: 201, headers: CORS, body: rep ? JSON.stringify([{ revision: f.row.revision }]) : '' });
       }
       return ok({ code: '42501', message: 'permission denied' }, 403);   // DELETE is revoked on the real backend
     }
     if (u.pathname === '/rest/v1/rpc/' + RPC.reset) {
       const id = 'b' + (f.backups.length + 1); f.backups.push({ id, row: JSON.parse(JSON.stringify(f.row)), at: Date.now() });
-      f.row.revision++; f.row.data = { flags: { cloudAsked: true, stagesCounted: (f.row.data.flags || {}).stagesCounted } };
+      f.row.revision++; f.row.strict = true; f.row.data = { flags: { cloudAsked: true, stagesCounted: (f.row.data.flags || {}).stagesCounted } };
       return ok({ game: 'acik_ofis', revision: f.row.revision, backup_id: id, best_score: f.row.best_score });
     }
     if (u.pathname === '/rest/v1/rpc/' + RPC.restore) {
       const b = f.backups.find((x) => x.id === body.p_backup_id); if (!b) return ok({ code: 'PT404', message: 'backup_not_found' }, 404);
-      f.row.revision++; f.row.data = b.row.data;
+      f.row.revision++; f.row.strict = true; f.row.data = b.row.data;
       return ok({ game: 'acik_ofis', revision: f.row.revision, backup_id: 'b' + (f.backups.length + 1), restored_from: b.id, best_score: f.row.best_score });
     }
     if (u.pathname === '/rest/v1/rpc/' + RPC.listBackups) return ok(f.backups.slice().reverse().map((b) => ({ id: b.id, revision: b.row.revision, reason: 'reset', score: b.row.data.totalEarned || 0, best_score: b.row.best_score, stage: 0, best_stage: 0, created_at: new Date(b.at).toISOString(), expires_at: new Date(b.at + 30 * 86400e3).toISOString() })));
@@ -71,7 +87,7 @@ for (const signedIn of [false, true]) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'tr-TR' });
   const f = await fake(ctx);
   const save = grownSave(Date.now());
-  if (signedIn) { save.revision = 3; f.row = { data: save, save_version: save.v || 1, updated_at: new Date().toISOString(), revision: 3, best_score: save.totalEarned }; }
+  if (signedIn) { save.revision = 3; f.row = { data: save, save_version: save.v || 1, updated_at: new Date().toISOString(), revision: 3, strict: true, best_score: save.totalEarned }; }
   await ctx.addInitScript(([s, sess]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('acik_ofis_save_v1', JSON.stringify(s)); if (sess) localStorage.setItem('acik_ofis_auth_v1', sess); sessionStorage.setItem('seeded', '1'); } }, [save, signedIn ? SESSION : null]);
   const p = await ctx.newPage(); const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
@@ -138,7 +154,7 @@ for (const signedIn of [false, true]) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'tr-TR' });
   const f = await fake(ctx);
   const save = grownSave(Date.now()); save.revision = 3;
-  f.row = { data: save, save_version: save.v || 1, updated_at: new Date().toISOString(), revision: 3, best_score: save.totalEarned };
+  f.row = { data: save, save_version: save.v || 1, updated_at: new Date().toISOString(), revision: 3, strict: true, best_score: save.totalEarned };
   await ctx.addInitScript(([s, sess]) => { if (!localStorage.getItem('seeded')) { localStorage.setItem('acik_ofis_save_v1', JSON.stringify(s)); localStorage.setItem('acik_ofis_auth_v1', sess); localStorage.setItem('seeded', '1'); } }, [save, SESSION]);
   const errors = [];
   const open = async () => { const p = await ctx.newPage(); p.on('pageerror', (e) => errors.push(e.message)); await p.goto(base); await ready(p); await p.evaluate(() => document.querySelectorAll('.modal .btn.primary').forEach((b) => b.click())); return p; };
@@ -184,6 +200,25 @@ for (const signedIn of [false, true]) {
   const last = posts(A).at(-1);
   check('409: after an input the next write goes out with server revision + 1', posts(A).length === p1 + 1 && last.status === 201 && last.body.revision === f.row.revision, 'rev ' + (last && last.body.revision) + ', status ' + (last && last.status));
   check('two tabs: no page errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+// ================================================================ lenient row: an old client writes between pull and push
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'tr-TR' });
+  const f = await fake(ctx);
+  const save = grownSave(Date.now()); delete save.revision;
+  f.row = { data: save, save_version: save.v || 1, updated_at: new Date().toISOString(), revision: 1, strict: false, best_score: save.totalEarned };   // written by v2.1.x
+  f.beforePost = () => f.write({ data: Object.assign({}, save, { money: save.money + 1 }), save_version: 1, updated_at: new Date().toISOString() });   // old client: rev 1 -> 2
+  await ctx.addInitScript(([s, sess]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('acik_ofis_save_v1', JSON.stringify(s)); localStorage.setItem('acik_ofis_auth_v1', sess); sessionStorage.setItem('seeded', '1'); } }, [save, SESSION]);
+  const p = await ctx.newPage(); const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+  await p.goto(base); await ready(p); await p.waitForTimeout(1200);
+  const posts = () => f.reqs.filter((q) => q.m === 'POST' && q.path === '/rest/v1/acik_ofis_saves');
+  const first = posts()[0], rev1 = await p.evaluate(() => window.__acikOfis.ctrl.state.revision);
+  check('lenient: first push sent 2 (= server after the old write), server stored 3, client took 3', first && first.body.revision === 2 && f.row.revision >= 3 && rev1 === f.row.revision && f.row.strict === false, 'sent ' + (first && first.body.revision) + ', server ' + f.row.revision + ', client ' + rev1);
+  await p.evaluate(async () => { const a = window.__acikOfis; a.ctrl.state.money += 1; a.ctrl.save(); return a.cloud.pushNow(true); });
+  const last = posts().at(-1);
+  check('lenient: next push = returned + 1, accepted, row strict, no 409', last.body.revision === rev1 + 1 && last.status === 201 && f.row.strict === true && !f.reqs.some((q) => q.status === 409), 'sent ' + last.body.revision + ', status ' + last.status);
+  check('lenient: no page errors', errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
 await browser.close(); if (server) server.kill();

@@ -96,10 +96,10 @@ test('revision lives in the save; old saves load with revision 0', () => {
 
 // ------------------------------------------------------------------ real CloudClient over a fake PostgREST
 function fakeSupabase(server) {
-  const reqs = [];
+  const reqs = [], hooks = {};
   const fetch = async (url, o = {}) => {
     const u = new URL(url), body = o.body ? JSON.parse(o.body) : null, method = o.method || 'GET';
-    const entry = { method, path: u.pathname, search: u.search, body };
+    const entry = { method, path: u.pathname, search: u.search, body, prefer: (o.headers && o.headers.Prefer) || '' };
     reqs.push(entry);
     const reply = (status, js) => { entry.status = status; return new Response(js === undefined ? '' : JSON.stringify(js), { status }); };
     try {
@@ -108,12 +108,18 @@ function fakeSupabase(server) {
       if (u.pathname === '/rest/v1/rpc/' + RPC.restore) return reply(200, await server.restoreSave(body.p_backup_id));
       if (u.pathname === '/rest/v1/rpc/' + RPC.listBackups) return reply(200, await server.listBackups());
       if (u.pathname === '/rest/v1/acik_ofis_saves' && method === 'GET') { const r = await server.pull(); return reply(200, r ? [r] : []); }
-      if (u.pathname === '/rest/v1/acik_ofis_saves' && method === 'POST') { await server.upsert({ data: body.data, revision: body.revision }); return reply(201); }
+      if (u.pathname === '/rest/v1/acik_ofis_saves' && method === 'POST') {
+        if (hooks.beforePost) { const h = hooks.beforePost; hooks.beforePost = null; await h(); }   // e.g. an old client writes first
+        const r = await server.upsert({ data: body.data, revision: body.revision });
+        // PostgREST: return=representation + select=revision -> [{ revision }] (the value the trigger stored)
+        const prefer = (o.headers && (o.headers.Prefer || o.headers.prefer)) || '';
+        return /return=representation/.test(prefer) && /select=revision/.test(u.search) ? reply(201, [{ revision: r.revision }]) : reply(201);
+      }
       if (u.pathname.startsWith('/rest/v1/rpc/')) return reply(200, true);
       return reply(404, {});
     } catch (e) { return reply(e.status || 500, { code: e.code, message: e.message, details: e.details || null }); }
   };
-  return { fetch, reqs };
+  return { fetch, reqs, hooks };
 }
 function signedClient() {
   const c = new CloudClient({ url: 'https://sb.test', key: 'anon' });
@@ -147,7 +153,8 @@ test('real client: RPC names/params and upsert body follow the Backend notes; re
   const cur = await api.readSave();
   assert.equal(cur.revision, 3); assert.equal(cur.data.totalEarned, 10);
   const [w, rs, rr] = f.reqs;
-  assert.equal(w.path, '/rest/v1/acik_ofis_saves'); assert.equal(w.search, '?on_conflict=user_id');
+  assert.equal(w.path, '/rest/v1/acik_ofis_saves'); assert.equal(w.search, '?on_conflict=user_id&select=revision');
+  assert.match(w.prefer, /return=representation/);
   assert.equal(w.body.revision, 1); assert.equal(w.body.data.revision, 1); assert.equal(w.body.user_id, 'u1');
   assert.deepEqual([rs.path, rs.body], ['/rest/v1/rpc/acik_ofis_reset_save', {}]);
   assert.equal(rr.path, '/rest/v1/rpc/acik_ofis_restore_save'); assert.deepEqual(rr.body, { p_backup_id: r.backupId });
@@ -475,4 +482,50 @@ test('409: the current save is loaded ONCE, then no write until a real input (no
   A.cloud.release(); A.cloud.cancelPending();                       // = a trusted pointerdown/keydown in the page
   assert.equal(await A.cloud.pushNow(true), true); assert.equal((await server.pull()).revision, 3);
   B.cloud.cancelPending();
+});
+
+test('lenient row: an old client writes between our pull and push -> we take the revision the server returns, the next push is not stuck at "equal"', async () => {
+  const clk = clock(), ss = memStorage(), server = new MockSaveServer(ss, { broadcast: false, now: clk.now });
+  const f = fakeSupabase(server); globalThis.fetch = f.fetch;
+  const legacy = ajansSave(clk.now());
+  await server.upsert({ data: legacy });                            // v2.1.x client: no revision -> lenient row, rev 0
+  await server.upsert({ data: legacy });                            // equal (none sent) on a lenient row -> rev 1
+  assert.deepEqual([row(ss).revision, row(ss).strict], [1, false]);
+  // v2.2 pulls rev 1 (N); before its push (rev 2) the old client writes again: lenient, server -> 2 (N + 1)
+  f.hooks.beforePost = () => server.upsert({ data: Object.assign({}, legacy, { money: legacy.money + 1 }) });
+  const A = await device(clk, seeded(clk), f);
+  const first = f.reqs.find((q) => q.method === 'POST' && q.path === '/rest/v1/acik_ofis_saves');
+  assert.equal(first.body.revision, 2, 'sent N + 1 = 2 ...');
+  assert.equal(row(ss).revision, 3, '... equal to the server after the old write: accepted as old + 1 = 3');
+  assert.equal(row(ss).strict, false, 'row stays lenient (notes table)');
+  assert.equal(A.ctrl.state.revision, 3, 'L = the returned revision, not the sent one');
+  assert.equal(JSON.parse(A.ctrl.storage.getItem(S.SAVE_KEY)).revision, 3, 'local copy knows it too');
+  A.ctrl.state.money += 1;
+  assert.equal(await A.cloud.pushNow(true), true);
+  const last = f.reqs.filter((q) => q.method === 'POST' && q.path === '/rest/v1/acik_ofis_saves').at(-1);
+  assert.equal(last.body.revision, 4, 'next push = server + 1, not an equal revision');
+  assert.deepEqual([row(ss).revision, row(ss).strict, A.ctrl.state.revision], [4, true, 4], 'higher revision -> strict');
+  assert.equal(f.reqs.some((q) => q.status === 409), false);
+  await assert.rejects(server.upsert({ data: legacy }), (e) => e.code === 'PT409' && e.message === 'stale_revision', 'old client is now refused');
+  A.cloud.cancelPending();
+});
+test('mock = notes table: INSERT with revision > 0 is strict; reset/restore make a lenient row strict; restore without a row; 50 backups cap', async () => {
+  const mk = () => { const ss = memStorage(); return { ss, srv: new MockSaveServer(ss, { broadcast: false, now: () => T0 }) }; };
+  let { ss, srv } = mk();
+  await srv.upsert({ data: { totalEarned: 1 }, revision: 5 }); assert.deepEqual([row(ss).revision, row(ss).strict], [5, true]);
+  await srv.upsert({ data: { totalEarned: 1 }, revision: 9 }); assert.equal(row(ss).revision, 9, 'any gap accepted');
+  ({ ss, srv } = mk());
+  await srv.upsert({ data: { totalEarned: 10 } }); assert.deepEqual([row(ss).revision, row(ss).strict], [0, false]);
+  await srv.upsert({ data: { totalEarned: 10 }, revision: 0 }); assert.deepEqual([row(ss).revision, row(ss).strict], [1, false], 'equal, lenient -> old + 1, stays lenient');
+  await assert.rejects(srv.upsert({ data: { totalEarned: 9 }, revision: 1 }), (e) => e.message === 'stale_write');
+  const strictMode = new MockSaveServer(ss, { broadcast: false, strict: true });
+  await assert.rejects(strictMode.upsert({ data: { totalEarned: 99 }, revision: 1 }), (e) => e.message === 'stale_revision', "revision_mode 'strict'");
+  const r = await srv.resetSave(); assert.deepEqual([r.revision, row(ss).strict], [2, true]);
+  ({ ss, srv } = mk());
+  await srv.upsert({ data: { totalEarned: 10 } }); const b = await srv.resetSave();
+  ss.setItem(MOCK_KEY, JSON.stringify(Object.assign(JSON.parse(ss.getItem(MOCK_KEY)), { row: null })));   // (admin removed the row)
+  const back = await srv.restoreSave(b.backup_id);
+  assert.deepEqual([back.revision, back.backup_id, row(ss).strict], [1, null, true], 'no row: backup revision + 1, strict');
+  for (let i = 0; i < 60; i++) await srv.resetSave();
+  assert.equal((await srv.listBackups()).length, 50);
 });
