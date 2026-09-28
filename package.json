@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --port 4173 --strictPort",
-    "test": "node --test tests/unit/",
+    "test": "node --test tests/unit/*.test.mjs",
     "atlas": "node tools/atlas/build.mjs",
     "smoke": "node tests/smoke/smoke.mjs",
     "balance": "node tools/balance.mjs 60"
