@@ -380,7 +380,11 @@ test('confirm dialog copy: Yazı\'s fixed lists (no achievements in Açık Ofis)
   assert.equal(I.t('reset.restoreAsk', { t: '28 Eyl 2026 16:02' }), '28 Eyl 2026 16:02 tarihli bir yedeğin var. Geri yüklersen şimdiki ilerlemen silinir.');
   for (const k of ['title', 'body', 'lostTitle', 'keptTitle', 'hold', 'countdown', 'cancel', 'done', 'undo', 'restored', 'restoreYes', 'otherDevice', 'otherDeviceSync', 'undoExpired', 'failed'])
     assert.equal(typeof I.raw('reset.' + k), 'string', k);
-  for (const k of ['holdHint', 'deleteTitle', 'keepTitle', 'del', 'keep']) assert.equal(I.raw('reset.' + k), undefined, 'replaced placeholder removed: ' + k);
+  for (const k of ['holdHint', 'deleteTitle', 'keepTitle', 'del', 'keep', '_gecici']) assert.equal(I.raw('reset.' + k), undefined, 'placeholder/marker removed: ' + k);
+  assert.deepEqual([I.t('reset.undoExpired'), I.t('reset.failed'), I.t('reset.otherDeviceSync'), I.t('reset.restoreRow'), I.t('reset.restoreFailed')], [
+    'Geri alma süresi doldu.', 'Ofis şu an sıfırlanamadı. Bağlantını kontrol edip tekrar dene.',
+    'Oyuna başka bir cihazda ya da sekmede devam ettin. Güncel kayıt yüklendi.', 'Son yedeği geri yükle',
+    'Yedek şu an geri yüklenemedi. Bağlantını kontrol edip tekrar dene.'], 'Yazı\'s final copy');
   const ui = fs.readFileSync(new URL('../../src/ui/ui.js', import.meta.url), 'utf8');
   assert.equal(ui.includes("'reset.countdown'"), false, 'countdown is not rendered');
   assert.equal(new CloudClient({}).cfg.backupRetentionDays, 30);

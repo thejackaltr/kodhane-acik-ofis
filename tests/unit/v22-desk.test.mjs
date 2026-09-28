@@ -134,8 +134,8 @@ test('moving an item still recalculates (v2.1 behaviour kept) and uses the share
   assert.equal(occ.has(it.gx + ',' + it.gy), false);
   assert.equal(G.occupancy(s).get(it.gx + ',' + it.gy), 'item:' + it.id);
 });
-test('desk move texts exist in tr.json (placeholders until Yazı approves)', async () => {
+test('desk move texts: Yazı\'s final copy', async () => {
   const fs = await import('node:fs');
   const tr = JSON.parse(fs.readFileSync(new URL('../../src/locales/tr.json', import.meta.url)));
-  assert.equal(typeof tr.place.moveDesk, 'string'); assert.equal(typeof tr.toast.deskMoved, 'string');
+  assert.equal(tr.place.moveDesk, 'Masa için yeni bir yer seç. Taşımak ücretsiz.'); assert.equal(tr.toast.deskMoved, 'Masa taşındı.');
 });

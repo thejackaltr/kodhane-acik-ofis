@@ -106,6 +106,11 @@ for (const signedIn of [false, true]) {
     check('desk move: desk moved for free, mode closed', (after.gx !== d.gx || after.gy !== d.gy) && !after.placing && (await money(p)) === m0, JSON.stringify(after));
   }
 
+  if (signedIn) {   // signed in, but no backup yet -> the restore row stays hidden
+    await p.click('[data-test=menu]'); await p.waitForTimeout(800);
+    check('signed-in, no backup: restore row hidden (list asked, empty)', !(await p.isVisible('[data-test=menu-restore]')) && f.reqs.some((q) => q.path === '/rest/v1/rpc/' + RPC.listBackups));
+    await p.click('.modal .btn.ghost'); await p.waitForTimeout(300);
+  }
   const m0 = await money(p);
   const { lists, early } = await holdReset(p);
   check(tag + ': dialog = Yazı copy, fixed lists (4 go, 3 stay)', lists.title === 'Baştan başlamak istiyor musun?' && lists.del.length === 4 && lists.del[0] === 'Kasa ve kazanç' && lists.keep.length === 3 && lists.keep[2] === 'Kodhane hesabın' && lists.cancel === 'Vazgeç' && lists.hold === 'Baştan başlamak için basılı tut', JSON.stringify(lists));
@@ -130,7 +135,7 @@ for (const signedIn of [false, true]) {
     // settings row: restore the newest backup
     await p.click('[data-test=menu]');
     const row = await p.waitForSelector('[data-test=menu-restore]', { timeout: 5000 }).then(() => true, () => false);
-    check('signed-in: menu shows "restore newest backup" row (RPC.listBackups)', row && f.reqs.some((q) => q.path === '/rest/v1/rpc/' + RPC.listBackups));
+    check('signed-in, restorable backup: menu shows "Son yedeği geri yükle"', row && (await p.textContent('[data-test=menu-restore]')) === 'Son yedeği geri yükle');
     if (row) {
       await p.click('[data-test=menu-restore]');
       const ask = await p.textContent('[data-test=restore-ask]');
@@ -189,7 +194,7 @@ for (const signedIn of [false, true]) {
   const r0 = reads(A).length, p0 = posts(A).length;
   await tick(A); await A.waitForTimeout(600);
   const st = await A.evaluate(() => ({ money: window.__acikOfis.ctrl.state.money, held: window.__acikOfis.cloud.held, toast: [...document.querySelectorAll('.toast')].map((x) => x.textContent).join(' | ') }));
-  check('409: current save loaded once (1 read) + otherDeviceSync toast', reads(A).length === r0 + 1 && posts(A).length === p0 + 1 && st.money === 12345 && st.held && st.toast.includes('Oyuna başka bir cihazda ya da sekmede devam edildi.'), JSON.stringify(st));
+  check('409: current save loaded once (1 read) + otherDeviceSync toast', reads(A).length === r0 + 1 && posts(A).length === p0 + 1 && st.money === 12345 && st.held && st.toast.includes('Oyuna başka bir cihazda ya da sekmede devam ettin. Güncel kayıt yüklendi.'), JSON.stringify(st));
   const n = f.reqs.length;
   for (let i = 0; i < 3; i++) { await tick(A); await tick(B); }
   await A.waitForTimeout(1200);
