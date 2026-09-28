@@ -1,3 +1,4 @@
+import { track } from '../analytics.js';
 // v2.2 "Baştan başla" flow (no DOM): reset through the reset RPC (cloud.js RPC.reset, via resetApi), 10 s undo with RPC.restore
 // (snapshot kept in memory + localStorage backup), stale-write handling (409 PT409 or a newer revision in another tab:
 // load the current save, show reset.otherDevice, never overwrite it).
@@ -63,6 +64,7 @@ export class ResetFlow {
       this.pending = { backupId: r.backupId, snapshot, revision: r.revision, until: this.now() + this.undoMs, remote: !!this.api.remote };
       try { this.storage.setItem(UNDO_KEY, JSON.stringify(this.pending)); } catch (e) { /* memory copy is enough */ }
       this.ctrl.applyReset(r.revision, this.now(), { cloudAsked: !!this.api.remote || undefined });
+      track('reset_or_prestige');
       this.arm();
       this.hook('undoShown', this.pending);
       return { ok: true, backupId: r.backupId, revision: r.revision };

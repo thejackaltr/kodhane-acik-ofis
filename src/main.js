@@ -13,6 +13,7 @@ import { ResetFlow } from './cloud/resetFlow.js';
 import { SAVE_KEY } from './logic/save.js';
 import { TabGate } from './cloud/tabGate.js';
 import './style.css';
+import { track } from './analytics.js';
 
 // Locales: every src/locales/<code>.json is picked up automatically (tr = source + fallback).
 const LOCALE_KEY = 'acik_ofis_locale';
@@ -143,6 +144,7 @@ window.addEventListener('pagehide', () => { ctrl.save(); gate.release(); });
 
 // Welcome back on load (computed in the controller constructor)
 if (ctrl.pendingWelcome) ui.showWelcome(ctrl.pendingWelcome);
+track('game_start');
 
 // Test/debug handle (no secrets; read-only helpers + controller)
 window.__acikOfis = { ctrl, ui, cloud, leaderboard, game, resetFlow, scene: null, version: __APP_VERSION__ };

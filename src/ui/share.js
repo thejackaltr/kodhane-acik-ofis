@@ -1,5 +1,6 @@
 // "Ofisimi paylaş": Phaser snapshot -> branded PNG (stage name + game URL) -> navigator.share, fallback download + copy link.
 import { h, add } from './dom.js';
+import { track } from '../analytics.js';
 import { t } from '../logic/i18n.js';
 import { STAGES } from '../logic/config.js';
 
@@ -51,6 +52,7 @@ export function download(blobOrUrl, name) {
 }
 
 export function openShare(ui, ctrl, snapshot) {
+  track('share_click');
   const st = ctrl.state;
   const url = shareUrl();
   const text = t('share.text', { stage: t('stages.' + STAGES[st.stage].id), n: st.staff.length, p: st.projectsDone });

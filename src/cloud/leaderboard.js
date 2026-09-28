@@ -1,3 +1,4 @@
+import { track } from '../analytics.js';
 // v2: "Sıralama · Tüm Zamanlar" — the Kodhane leaderboard function with p_game='acik_ofis'.
 // Score = the cloud save's totalEarned (all-time). Nickname rules, the admin hide switch and the plausibility check are
 // the same server-side objects Kodhane uses (the nickname itself is shared with Kodhane: one per account).
@@ -112,6 +113,7 @@ export class LeaderboardUI {
   }
   share() {
     const me = this.L.view && this.L.view.me; if (!me) return;
+    track('share_click');
     const link = location.origin + location.pathname.replace(/index\.html$/, '');
     const text = t('lb.shareText', { n: me.rank }) + ' ' + link;
     if (navigator.share) navigator.share({ text }).catch(() => {});

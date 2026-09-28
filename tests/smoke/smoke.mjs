@@ -39,6 +39,9 @@ async function fakeBackend(ctx) {
     if (u.pathname === '/rest/v1/acik_ofis_saves' && r.method() === 'POST') { const b = body(); f.saves = [{ data: b.data, save_version: b.save_version, updated_at: b.updated_at }]; return route.fulfill({ status: 201, headers: CORS, body: '' }); }
     return route.fulfill({ status: 404, headers: CORS, body: '{}' });
   });
+  // Umami (analiz.teserix.com) is never contacted by the smoke test: an empty script (window.umami stays undefined =
+  // the "tracker blocked" path). The Umami section below overrides this with a fake tracker.
+  await ctx.route('https://analiz.teserix.com/**', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
   return f;
 }
 const newContextReal = browser.newContext.bind(browser);
@@ -592,6 +595,34 @@ for (const vp of [{ name: '390', viewport: { width: 390, height: 844 } }, { name
   check('i18n: +30% text fits in team sheet', over2 === 0);
   await p.screenshot({ path: path.join(shots, 'pseudo-30-team-mobile.png') });
   check('pseudo: no page errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+
+// ================================================================ Umami (analiz.teserix.com): fake tracker + blocked tracker
+{
+  const FAKE = 'window.__umamiCalls = []; window.umami = { track: function () { window.__umamiCalls.push([].slice.call(arguments)); } };';
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'tr-TR' });
+  const hits = [];
+  await ctx.route('https://analiz.teserix.com/**', (r) => { hits.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE }); });
+  const p = await ctx.newPage();
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+  await p.goto(base); await ready(p);
+  await p.waitForFunction(() => window.__umamiCalls && window.__umamiCalls.length > 0, null, { timeout: 5000 }).catch(() => {});
+  check('umami: script requested once from analiz.teserix.com', hits.filter((u) => u.endsWith('/script.js')).length === 1, JSON.stringify(hits));
+  await p.tap('[data-test=nav-share]'); await p.waitForSelector('[data-test=share-img]');
+  const calls = await p.evaluate(() => window.__umamiCalls);
+  check('umami: game_start + share_click sent, names only', JSON.stringify(calls.slice(0, 2)) === JSON.stringify([['game_start'], ['share_click']]) && calls.every((c) => c.length === 1 && typeof c[0] === 'string'), JSON.stringify(calls));
+  check('umami: no page errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'tr-TR' });
+  await ctx.route('https://analiz.teserix.com/**', (r) => r.abort('blockedbyclient'));
+  const p = await ctx.newPage();
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+  await p.goto(base); await ready(p);
+  await p.tap('[data-test=nav-share]'); await p.waitForSelector('[data-test=share-img]');
+  check('umami blocked: game + share still work, no page errors', errors.length === 0 && await p.evaluate(() => typeof window.umami === 'undefined'), errors.join(' | '));
   await ctx.close();
 }
 

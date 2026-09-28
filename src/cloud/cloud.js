@@ -9,6 +9,7 @@ import { BACKUP_KEY } from '../logic/save.js';
 // every call site goes through CloudClient.resetSave/restoreSave/listBackups. Game-specific functions (the two games
 // move to separate Supabase instances), so no p_game parameter. Signatures assumed = the old reset_save/restore_save
 // minus p_game until the notes name them (reset: {}, restore: { p_backup_id }, list: {}).
+import { track } from '../analytics.js';
 export const RPC = Object.freeze({
   reset: 'acik_ofis_reset_save',
   restore: 'acik_ofis_restore_save',
@@ -208,6 +209,7 @@ export class CloudSync {
     try {
       await this.client.verifyCode(this.pendingEmail, code);
       this.setPending('');
+      track('login_success');
       this.reconciled = false;
       await this.reconcile(true);
       return true;
@@ -295,6 +297,8 @@ export class CloudSync {
         if (this.ctrl.state === st && st.revision !== got) { st.revision = got; this.ctrl.storeQuiet(); }   // local copy knows it too
       } else await this.client.push(st, keepalive);
       this.lastSig = this.ctrl.state === st ? this.sig(st) : s; this.lastPushAt = Date.now();
+      // Umami: autosave is frequent; fire cloud_save once per session (first successful push).
+      if (!this._umamiCloudSave) { this._umamiCloudSave = true; track('cloud_save'); }
       this.set('saved');
       return true;
     } catch (e) {
