@@ -104,6 +104,7 @@ function fakeSupabase(server) {
       if (method === 'DELETE') return reply(403, { code: '42501', message: 'permission denied' });
       if (u.pathname === '/rest/v1/rpc/' + RPC.reset) return reply(200, await server.resetSave());
       if (u.pathname === '/rest/v1/rpc/' + RPC.restore) return reply(200, await server.restoreSave(body.p_backup_id));
+      if (u.pathname === '/rest/v1/rpc/' + RPC.listBackups) return reply(200, await server.listBackups());
       if (u.pathname === '/rest/v1/acik_ofis_saves' && method === 'GET') { const r = await server.pull(); return reply(200, r ? [r] : []); }
       if (u.pathname === '/rest/v1/acik_ofis_saves' && method === 'POST') { await server.upsert({ data: body.data, revision: body.revision }); return reply(201); }
       if (u.pathname.startsWith('/rest/v1/rpc/')) return reply(200, true);
@@ -188,6 +189,29 @@ test('real, two devices: A resets via RPC.reset (no empty save write) -> B\'s pu
   assert.equal(f.reqs.some((q) => q.method === 'DELETE'), false, 'no DELETE anywhere');
   assert.equal(f.reqs.filter((q) => q.method === 'POST' && q.path === '/rest/v1/acik_ofis_saves').every((q) => Number.isInteger(q.body.revision)), true, 'every save write carries revision');
   A.cloud.cancelPending(); B.cloud.cancelPending();   // no 30 s push timers left behind
+});
+test('settings row: newest backup (empty copies skipped) via RPC.listBackups, restore loads it, gone after 30 days', async () => {
+  const clk = clock(), server = new MockSaveServer(memStorage(), { broadcast: false, now: clk.now });
+  const f = fakeSupabase(server); globalThis.fetch = f.fetch;
+  const A = await device(clk, seeded(clk), f);
+  assert.equal(await A.cloud.saveApi.newestBackup(), null, 'no backup yet -> no row');
+  const office = A.ctrl.state.desks.length, earned = A.ctrl.state.totalEarned;
+  clk.advance(1000); assert.ok((await A.flow.reset()).ok);
+  clk.advance(1000); assert.ok((await A.flow.undo()).ok); await settle();      // restore makes a backup of the empty reset save
+  clk.advance(1000); assert.ok((await A.flow.reset()).ok); A.flow.drop(true);
+  const list = await A.cloud.saveApi.listBackups();
+  assert.equal(list.length, 3); assert.equal(list.some((b) => b.score === 0), true);
+  const b = await A.cloud.saveApi.newestBackup();
+  assert.ok(b.score > 0 && b.createdAt === T0 + 3000, 'newest non-empty = the second reset\'s backup');
+  assert.equal(f.reqs.filter((q) => q.path === '/rest/v1/rpc/acik_ofis_list_save_backups').every((q) => JSON.stringify(q.body) === '{}'), true);
+  const r = await A.flow.restoreBackup(b.id); await settle();
+  assert.ok(r.ok); assert.equal(A.ctrl.state.desks.length, office); assert.equal(A.ctrl.state.totalEarned, earned);
+  assert.equal(A.ctrl.state.revision, (await server.pull()).revision, 'loaded exactly the server copy');
+  assert.equal(A.log.at(-1), 'restored');
+  clk.advance(31 * 86400e3);
+  assert.equal(await A.cloud.saveApi.newestBackup(), null, 'expired -> row hidden');
+  assert.equal((await A.flow.restoreBackup(b.id)).ok, false); assert.equal(A.log.at(-1), 'failed:reset.restoreFailed');
+  A.cloud.cancelPending();
 });
 test('real, RPC.reset fails (offline): nothing is reset locally, reset.failed', async () => {
   const clk = clock();

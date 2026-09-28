@@ -482,7 +482,7 @@
     "s4": "Kodhane: Açık Ofis. Tarayıcıda ve telefonda oyna."
   },
   "reset": {
-    "_gecici": "GEÇİCİ METİN: reset.undoExpired, reset.failed, reset.otherDeviceSync, place.moveDesk ve toast.deskMoved Yazı'nın onayını bekliyor (v2.2). Diğer reset.* metinleri Yazı'nındır.",
+    "_gecici": "GEÇİCİ METİN: reset.undoExpired, reset.failed, reset.otherDeviceSync, reset.restoreRow, reset.restoreFailed, place.moveDesk ve toast.deskMoved Yazı'nın onayını bekliyor (v2.2). Diğer reset.* metinleri Yazı'nındır.",
     "title": "Baştan başlamak istiyor musun?",
     "body": "Ofisin sıfırdan başlar. Bu cihazdaki ve buluttaki kaydın değişir.",
     "lostTitle": "Silinecekler",
@@ -510,6 +510,8 @@
     "otherDevice": "Kaydın başka bir cihazda sıfırlandı. Güncel kayıt yüklendi.",
     "otherDeviceSync": "Oyuna başka bir cihazda ya da sekmede devam edildi. Güncel kayıt yüklendi.",
     "undoExpired": "Geri alma süresi doldu.",
-    "failed": "Şu an sıfırlanamadı. Bağlantını kontrol edip tekrar dene."
+    "failed": "Şu an sıfırlanamadı. Bağlantını kontrol edip tekrar dene.",
+    "restoreRow": "Son yedeği geri yükle",
+    "restoreFailed": "Yedek şu an geri yüklenemedi. Biraz sonra tekrar dene."
   }
 }

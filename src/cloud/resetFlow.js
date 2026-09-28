@@ -93,6 +93,26 @@ export class ResetFlow {
       return { ok: true, revision };
     } finally { this.busy = false; this.ctrl.resetting = false; }
   }
+  // settings row: restore a server backup (signed-in players). The server copy is loaded as is (no local snapshot here).
+  async restoreBackup(backupId) {
+    if (this.busy || !this.api.remote || !backupId) return { ok: false, reason: 'busy' };
+    this.busy = true; this.ctrl.resetting = true;
+    try {
+      if (this.opts.beforeReset) { try { this.opts.beforeReset(); } catch (e) { /* ignore */ } }
+      let r, cur;
+      try { r = await this.api.restoreSave({ backupId }); cur = await this.api.readSave(); } catch (e) {
+        // restored but not read back: our revision stays behind the server, so the next write gets 409 and loads it
+        this.hook('failed', 'reset.restoreFailed'); return { ok: false, reason: isBackupNotFound(e) ? 'expired' : 'network' };
+      }
+      this.ctrl.resetting = false;
+      this.drop(true);
+      this.ctrl.adoptRemote(cur && cur.data, Math.max(r.revision, cur ? cur.revision : 0), this.now());
+      this.mirrorSig = sig(this.ctrl.state);
+      if (this.opts.adopted) { try { this.opts.adopted(); } catch (e) { /* ignore */ } }
+      this.hook('restored');
+      return { ok: true, revision: this.rev() };
+    } finally { this.busy = false; this.ctrl.resetting = false; }
+  }
   arm() {
     if (this.timer) this.clearTimer(this.timer);
     this.timer = this.setTimer(() => { this.timer = null; this.drop(true); }, this.undoLeftMs());

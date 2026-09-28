@@ -18,6 +18,8 @@
  *             Own backup < 30 days only, else 404 code "PT404" message "backup_not_found". No revision check.
  *             The 10 s "Geri al" uses it with the reset's backup_id; the client then writes its (fresher) in-memory
  *             snapshot with revision = returned + 1.
+ *  - Backups: POST /rest/v1/rpc/<RPC.listBackups> {} -> [{ id, revision, reason, score, best_score, stage, best_stage, created_at, expires_at }]
+ *             (settings row "restore the newest backup", signed-in players only)
  *  - Read:    GET /rest/v1/acik_ofis_saves?select=data,save_version,updated_at,revision,best_score&user_id=eq.<uid>
  *  - No DELETE (42501) and no empty-save write: the client resets only through RPC.reset.
  *
@@ -76,6 +78,7 @@ export class MockSaveServer {
     this.storage = storage; this.key = opts.key || MOCK_KEY;
     this.now = opts.now || (() => Date.now());
     this.strictMode = !!opts.strict;        // game_config revision_mode.acik_ofis = 'strict'
+    this.retentionMs = (opts.retentionDays || 30) * 86400e3;   // game_config backup_retention_days
     this.listeners = []; this.channel = null;
     const useBc = opts.broadcast !== undefined ? opts.broadcast : typeof window !== 'undefined';
     if (useBc && typeof BroadcastChannel !== 'undefined') {
@@ -131,7 +134,7 @@ export class MockSaveServer {
   }
   // rpc RPC.restore (same: strict afterwards)
   async restoreSave(backupId) {
-    const s = this.load(), t = this.now(), b = s.backups.find((x) => x.id === backupId);
+    const s = this.load(), t = this.now(), b = s.backups.find((x) => x.id === backupId && x.createdAt > t - this.retentionMs);
     if (!b) throw pgError(404, 'PT404', 'backup_not_found');
     let bid = null, rev;
     if (s.row) {
@@ -146,9 +149,18 @@ export class MockSaveServer {
     this.store(s, true);
     return { revision: rev, backup_id: bid, restored_from: b.id, best_score: s.row.best, best_stage: s.row.bestStage || 0 };
   }
+  // rpc RPC.listBackups (same columns as the SQL)
+  async listBackups() {
+    const t = this.now();
+    return this.load().backups.filter((b) => b.createdAt > t - this.retentionMs).sort((a, b) => b.createdAt - a.createdAt).map((b) => ({
+      id: b.id, revision: b.revision, reason: b.reason, score: saveScore(b.payload), best_score: b.best || 0, stage: saveStage(b.payload),
+      best_stage: b.bestStage || 0, created_at: new Date(b.createdAt).toISOString(), expires_at: new Date(b.createdAt + this.retentionMs).toISOString() }));
+  }
 }
 
 // ------------------------------------------------------------------ facade used by the reset flow / cloud sync
+// a list_save_backups row -> { id, createdAt (ms), score, reason, revision }
+const backupRow = (r) => ({ id: r.id, createdAt: Date.parse(r.created_at) || 0, score: +r.score || 0, reason: r.reason || '', revision: n0(r.revision) });
 // api.remote: a server is in use (mock: always; real: signed in). api.mirrors: every local save is also written to it
 // by the reset flow (mock only; in 'real' mode CloudSync does the throttled push).
 export function createSaveApi({ mode = resolveMode(), client = null, storage, now, broadcast, strict } = {}) {
@@ -171,6 +183,12 @@ export function createSaveApi({ mode = resolveMode(), client = null, storage, no
       if (!Array.isArray(body.desks) || !body.desks.length) return Promise.reject(new Error('empty save refused'));   // resets go through RPC.reset only
       return wrap((mock ? mock.upsert({ data: body, revision }) : client.push(body, keepalive, revision).then(() => ({ revision }))));
     },
+    // RPC.listBackups: own non-expired backups, newest first
+    listBackups() {
+      return wrap((mock ? mock.listBackups() : client.listBackups()).then((rows) => (Array.isArray(rows) ? rows.map(backupRow) : [])));
+    },
+    // the newest backup worth restoring (an empty office, e.g. the copy taken by "Geri al" of the reset save, is skipped)
+    newestBackup() { return api.listBackups().then((l) => l.filter((b) => b.id && b.score > 0).sort((a, b) => b.createdAt - a.createdAt)[0] || null); },
     readSave() {
       return wrap((mock ? mock.pull() : client.pull(true)).then((row) => {
         if (!row) return null;

@@ -35,7 +35,7 @@ async function fake(ctx) {
       return ok({ code: '42501', message: 'permission denied' }, 403);   // DELETE is revoked on the real backend
     }
     if (u.pathname === '/rest/v1/rpc/' + RPC.reset) {
-      const id = 'b' + (f.backups.length + 1); f.backups.push({ id, row: JSON.parse(JSON.stringify(f.row)) });
+      const id = 'b' + (f.backups.length + 1); f.backups.push({ id, row: JSON.parse(JSON.stringify(f.row)), at: Date.now() });
       f.row.revision++; f.row.data = { flags: { cloudAsked: true, stagesCounted: (f.row.data.flags || {}).stagesCounted } };
       return ok({ game: 'acik_ofis', revision: f.row.revision, backup_id: id, best_score: f.row.best_score });
     }
@@ -44,6 +44,7 @@ async function fake(ctx) {
       f.row.revision++; f.row.data = b.row.data;
       return ok({ game: 'acik_ofis', revision: f.row.revision, backup_id: 'b' + (f.backups.length + 1), restored_from: b.id, best_score: f.row.best_score });
     }
+    if (u.pathname === '/rest/v1/rpc/' + RPC.listBackups) return ok(f.backups.slice().reverse().map((b) => ({ id: b.id, revision: b.row.revision, reason: 'reset', score: b.row.data.totalEarned || 0, best_score: b.row.best_score, stage: 0, best_stage: 0, created_at: new Date(b.at).toISOString(), expires_at: new Date(b.at + 30 * 86400e3).toISOString() })));
     if (u.pathname.startsWith('/rest/v1/rpc/')) return ok(u.pathname.endsWith('leaderboard') ? [] : true);
     if (u.pathname === '/rest/v1/kodhane_profiles') return ok([]);
     return ok({}, 404);
@@ -108,6 +109,24 @@ for (const signedIn of [false, true]) {
     const writes = f.reqs.filter((q) => q.m === 'POST' && q.path === '/rest/v1/acik_ofis_saves');
     check('signed-in: every save write carries revision, none is empty', writes.every((q) => Number.isInteger(q.body.revision) && q.body.data && q.body.data.desks), writes.length + ' writes');
     check('signed-in: no DELETE request', !f.reqs.some((q) => q.m === 'DELETE'));
+    // settings row: restore the newest backup
+    await p.click('[data-test=menu]');
+    const row = await p.waitForSelector('[data-test=menu-restore]', { timeout: 5000 }).then(() => true, () => false);
+    check('signed-in: menu shows "restore newest backup" row (RPC.listBackups)', row && f.reqs.some((q) => q.path === '/rest/v1/rpc/' + RPC.listBackups));
+    if (row) {
+      await p.click('[data-test=menu-restore]');
+      const ask = await p.textContent('[data-test=restore-ask]');
+      check('signed-in: restoreAsk with a tr-TR date', /^\d{1,2} \S+ 20\d\d \d{2}:\d{2} tarihli bir yedeğin var\. Geri yüklersen şimdiki ilerlemen silinir\.$/.test(ask), ask);
+      const n0 = f.reqs.filter((q) => q.path === '/rest/v1/rpc/' + RPC.restore).length;
+      await p.click('[data-test=restore-yes]'); await p.waitForTimeout(800);
+      const toast = await p.evaluate(() => [...document.querySelectorAll('.toast')].map((x) => x.textContent).join(' | '));
+      const rs = f.reqs.filter((q) => q.path === '/rest/v1/rpc/' + RPC.restore);
+      check('signed-in: restoreYes -> RPC.restore(newest) + "restored" toast', rs.length === n0 + 1 && rs.at(-1).body.p_backup_id === 'b1' && toast.includes('Eski ofisin geri yüklendi.'), toast);
+    }
+  } else {
+    await p.click('[data-test=menu]'); await p.waitForTimeout(600);
+    check('guest: no backup row in the menu', !(await p.isVisible('[data-test=menu-restore]')) && !f.reqs.some((q) => q.path === '/rest/v1/rpc/' + RPC.listBackups));
+    await p.keyboard.press('Escape');
   }
   check(tag + ': no page errors', errors.length === 0, errors.join(' | '));
   await ctx.close();

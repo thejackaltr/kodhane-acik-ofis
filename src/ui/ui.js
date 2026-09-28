@@ -345,6 +345,14 @@ export class UI {
   showMenu() {
     const s = this.ctrl.state;
     this.showModal((box, close) => {
+      // v2.2: "restore the newest backup" row, only for signed-in players who have one (async: RPC.listBackups)
+      const restoreSlot = h('div', { class: 'menu-restore' });
+      if (this.opts.backups) {
+        Promise.resolve(this.opts.backups.newest()).then((b) => {
+          if (!b || !restoreSlot.isConnected) return;
+          add(restoreSlot, h('button', { class: 'btn big', 'data-test': 'menu-restore', onclick: () => { close(); this.confirmRestore(b); } }, t('reset.restoreRow')));
+        }).catch(() => { /* no row */ });
+      }
       add(box, h('h2', { text: t('menu.title') }),
         h('p', { class: 'dim', text: t('menu.stats', { p: s.projectsDone, k: s.catNaps, v: tl(s.totalEarned) }) }),
         this.opts.leaderboard ? h('button', { class: 'btn big', 'data-test': 'menu-leaderboard', onclick: () => { close(); this.opts.leaderboard.show(); } }, '🏆 ' + t('menu.leaderboard')) : null,
@@ -355,6 +363,7 @@ export class UI {
           h('select', { onchange: (e) => this.opts.changeLocale && this.opts.changeLocale(e.target.value) },
             available().map((code) => { const o = h('option', { value: code, text: t('languages.' + code) }); if (code === locale()) o.selected = true; return o; }))) : null,
         h('button', { class: 'btn big', onclick: () => { close(); this.showCredits(); } }, 'ℹ️ ' + t('menu.credits')),
+        restoreSlot,
         h('button', { class: 'btn big danger', 'data-test': 'menu-reset', onclick: () => { close(); this.confirmReset(); } }, t('menu.reset')),
         h('button', { class: 'btn ghost', onclick: close }, t('menu.close')));
     });
@@ -371,6 +380,15 @@ export class UI {
         ctx.signedIn ? h('p', { class: 'note', 'data-test': 'reset-backup', text: t('reset.backup', { d: ctx.backupDays }) }) : null,
         btn,
         h('button', { class: 'btn ghost', autofocus: true, 'data-test': 'reset-cancel', onclick: close }, t('reset.cancel')));
+    }, { cls: 'reset' });
+  }
+  confirmRestore(b) {
+    const loc = locale() === 'tr' ? 'tr-TR' : locale();
+    let when = ''; try { when = new Intl.DateTimeFormat(loc, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(b.createdAt)); } catch (e) { when = new Date(b.createdAt).toLocaleString('tr-TR'); }
+    this.showModal((box, close) => {
+      add(box, h('h2', { text: t('reset.restoreRow') }), h('p', { 'data-test': 'restore-ask', text: t('reset.restoreAsk', { t: when }) }),
+        h('button', { class: 'btn big danger', 'data-test': 'restore-yes', onclick: (e) => { e.currentTarget.disabled = true; close(); this.opts.backups.restore(b.id); } }, t('reset.restoreYes')),
+        h('button', { class: 'btn ghost', autofocus: true, 'data-test': 'restore-cancel', onclick: close }, t('reset.cancel')));
     }, { cls: 'reset' });
   }
   // v2.2: "Geri al" toast for the undo window (a shrinking bar, no numbers)

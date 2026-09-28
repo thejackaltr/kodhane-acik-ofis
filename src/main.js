@@ -34,7 +34,7 @@ const ctrl = new Controller(storage);
 const cloud = new CloudSync(ctrl, null, { saveApi: (client) => createSaveApi({ mode: resolveMode(), client, storage }) });
 const resetApi = cloud.saveApi;
 const cloudUi = new CloudUI(cloud);
-const resetFlow = new ResetFlow(ctrl, resetApi, { storage, beforeReset: () => cloud.cancelPending(), pushNow: () => cloud.pushNow(true), ui: {
+const resetFlow = new ResetFlow(ctrl, resetApi, { storage, beforeReset: () => cloud.cancelPending(), pushNow: () => cloud.pushNow(true), adopted: () => { cloud.lastSig = cloud.sig(ctrl.state); }, ui: {
   undoShown: (p) => ui.showUndo(p, () => resetFlow.undo()),
   undoGone: () => ui.hideUndo(),
   restored: () => ui.toast(t('reset.restored'), 'ok'),
@@ -70,6 +70,7 @@ const ui = new UI(document.getElementById('ui'), ctrl, {
   fit: () => scene && scene.fitView(),
   snapshot: (cb) => snapshot(cb),
   onReset: () => resetFlow.reset(),
+  backups: { newest: () => (cloud.signedIn() && resetApi.remote ? resetApi.newestBackup() : Promise.resolve(null)), restore: (id) => resetFlow.restoreBackup(id) },
   resetContext: () => ({ signedIn: cloud.signedIn(), backupDays: cloud.client.cfg.backupRetentionDays }),
   changeLocale
 });
