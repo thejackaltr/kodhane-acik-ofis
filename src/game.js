@@ -5,14 +5,15 @@ import * as TU from './logic/tutorial.js';
 import * as EV from './logic/events.js';
 import * as OFF from './logic/offline.js';
 import * as SAVE from './logic/save.js';
-import { CFG } from './logic/config.js';
+import { CFG, ITEMS, STAGES, STAGE_COUNTER_PREFIX } from './logic/config.js';
 import * as G from './logic/grid.js';
 
 export class Controller {
   constructor(storage, now = Date.now()) {
     this.storage = storage;
     this.listeners = {};
-    this.placing = null;          // { kind, hireType|null }
+    this.placing = null;          // { kind, hireType|null, item|null }
+    this.tip = null;              // { key, until } one-time hint shown for a few seconds (tutorial.pm)
     this.saveTimer = 0;
     this.catTimer = 30;           // first cat nap soon after start
     this.cloudHooks = null;       // seam for cloud save: { onSaved(state) }
@@ -59,7 +60,20 @@ export class Controller {
     if (res.delivered.length) {
       for (const d of res.delivered) this.emit('delivered', d);
       if (TU.notify(this.state, 'delivered')) this.emit('tutorial');
+      this.countStage();
       this.changed();
+    }
+    if (this.tip && Date.now() > this.tip.until) { this.tip = null; this.emit('tutorial'); }
+  }
+  // v2: anonymous stage counter (first delivery = stage 0, then every move); once per save, no personal data
+  countStage() {
+    const s = this.state, f = s.flags;
+    if (!Array.isArray(f.stagesCounted)) f.stagesCounted = [];
+    for (let i = 0; i <= s.stage; i++) {
+      if (f.stagesCounted.includes(i)) continue;
+      if (i === 0 && s.projectsDone < 1) continue;
+      f.stagesCounted.push(i);
+      this.emit('count', STAGE_COUNTER_PREFIX + i);
     }
   }
   // back from hidden tab / long gap: offline catch-up (capped) and maybe a welcome popup
@@ -106,7 +120,7 @@ export class Controller {
     if (!s.projects.length) { opened = true; this.emit('openOffers'); }
     const r = E.tapLaptop(s);
     const stepChanged = TU.notify(s, 'laptop');
-    if (r.delivered && r.delivered.length) { for (const d of r.delivered) this.emit('delivered', d); if (TU.notify(s, 'delivered')) this.emit('tutorial'); }
+    if (r.delivered && r.delivered.length) { for (const d of r.delivered) this.emit('delivered', d); if (TU.notify(s, 'delivered')) this.emit('tutorial'); this.countStage(); }
     if (stepChanged) this.emit('tutorial');
     this.changed();
     return { ...r, opened };
@@ -130,13 +144,27 @@ export class Controller {
   finishHire(r) {
     if (r.ok) {
       if (TU.notify(this.state, 'hired')) this.emit('tutorial');
+      // v2: the first Proje Yöneticisi -> one-time tip (if their desk was not placed by hand, show it for a while)
+      if (r.staff.type === 'pm' && !this.state.flags.pmTip) {
+        this.state.flags.pmTip = true;
+        if (!r.placed) { this.tip = { key: 'tutorial.pm', until: Date.now() + 9000 }; this.emit('tutorial'); }
+      }
       this.emit('hired', r); this.changed(); this.save();
     }
     return r;
   }
   startPlacing(hireType = null) {
-    this.placing = { kind: E.deskKindForStage(this.state.stage), hireType };
+    this.placing = { kind: E.deskKindForStage(this.state.stage), hireType, item: null };
     this.emit('placing', this.placing); this.emit('tutorial');
+  }
+  // v2: place an area item (kahve / bitki / sunucu)
+  startItem(type) {
+    const s = this.state;
+    if (!E.itemAvailable(s, type)) return { ok: false, reason: 'kilitli' };
+    if (s.money < E.itemCost(s, type)) return { ok: false, reason: 'para' };
+    this.placing = { kind: ITEMS[type].kind, hireType: null, item: type };
+    this.emit('placing', this.placing); this.emit('tutorial');
+    return { ok: true };
   }
   cancelPlacing() { this.placing = null; this.emit('placing', null); this.emit('tutorial'); }
   placeAt(gx, gy) {
@@ -144,9 +172,12 @@ export class Controller {
     const s = this.state;
     if (!G.canPlace(s, p.kind, gx, gy)) return { ok: false, reason: 'yer' };
     let r;
-    if (p.hireType) {
+    if (p.item) {
+      r = E.buyItem(s, p.item, gx, gy);
+      if (r.ok) { this.placing = null; this.emit('placing', null); this.emit('itemPlaced', r.item); this.changed(); this.save(); }
+    } else if (p.hireType) {
       r = E.hire(s, p.hireType, { kind: p.kind, gx, gy });
-      if (r.ok) { this.placing = null; this.emit('placing', null); this.emit('deskPlaced', r.desk); this.finishHire(r); }
+      if (r.ok) { r.placed = true; this.placing = null; this.emit('placing', null); this.emit('deskPlaced', r.desk); this.finishHire(r); }
     } else {
       r = E.buyDesk(s, p.kind, gx, gy);
       if (r.ok) { this.placing = null; this.emit('placing', null); this.emit('deskPlaced', r.desk); this.changed(); this.save(); }
@@ -157,8 +188,12 @@ export class Controller {
   promote(staffId) { const r = E.promote(this.state, staffId); if (r.ok) { this.emit('promoted', r.staff); this.changed(); this.save(); } return r; }
   assign(staffId, projectId) { const ok = E.assignStaff(this.state, staffId, projectId); if (ok) this.changed(); return ok; }
   buyUpgrade(id) { const r = E.buyUpgrade(this.state, id); if (r.ok) { this.changed(); this.save(); } return r; }
-  move() { const r = E.moveOffice(this.state); if (r.ok) { this.emit('reload', this.state); this.emit('moved', r.stage); this.changed(); this.save(); } return r; }
+  move() { const r = E.moveOffice(this.state); if (r.ok) { this.emit('reload', this.state); this.emit('moved', r.stage); this.countStage(); this.changed(); this.save(); } return r; }
   chooseEvent(choice) { const r = EV.applyChoice(this.state, choice); this.changed(); this.save(); return r; }
   laterEvent() { EV.dismiss(this.state); }
-  hint() { return TU.currentHint(this.state, { placingDesk: !!this.placing }); }
+  hint() {
+    const p = this.placing, tip = this.tip && Date.now() <= this.tip.until ? this.tip.key : null;
+    return TU.currentHint(this.state, { placingDesk: !!p && !p.item, placingItem: !!(p && p.item), placingPm: !!(p && p.hireType === 'pm'),
+      glow: !!p && E.glowTiles(this.state).size > 0, tip });
+  }
 }

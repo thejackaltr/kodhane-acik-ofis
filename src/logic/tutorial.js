@@ -5,6 +5,10 @@ export const STEPS = ['laptop', 'basla', 'stajyer', 'teklif'];
 // what to show right now: { key: 'tutorial.<id>', target: 'laptop'|'ekip'|'teklif'|null } or null
 export function currentHint(state, ui = {}) {
   const tu = state.tutorial;
+  // v2: one-time tip for the first Proje Yöneticisi (while placing their desk, or right after the hire)
+  if (ui.tip) return { key: ui.tip, target: 'placement' };
+  if (ui.placingPm && !state.flags.pmTip) return { key: 'tutorial.pm', target: 'placement' };
+  if (ui.placingItem || (ui.placingDesk && ui.glow && tu.done)) return { key: 'items.area', target: 'placement' };
   if (tu.done) return null;
   if (ui.placingDesk) return { key: 'tutorial.masa', target: 'placement' };
   switch (STEPS[tu.step]) {

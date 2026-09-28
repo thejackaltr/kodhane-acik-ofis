@@ -1,5 +1,5 @@
 // "Ofisimi paylaş": Phaser snapshot -> branded PNG (stage name + game URL) -> navigator.share, fallback download + copy link.
-import { h } from './dom.js';
+import { h, add } from './dom.js';
 import { t } from '../logic/i18n.js';
 import { STAGES } from '../logic/config.js';
 
@@ -59,10 +59,10 @@ export function openShare(ui, ctrl, snapshot) {
     const dataUrl = canvas.toDataURL('image/png');
     window.__lastShare = { url, text, width: canvas.width, height: canvas.height }; // for tests
     ui.showModal((box, close) => {
-      box.append(h('h2', { text: t('share.title') }), h('img', { class: 'share-img', src: dataUrl, alt: t('share.title'), 'data-test': 'share-img' }));
+      add(box, h('h2', { text: t('share.title') }), h('img', { class: 'share-img', src: dataUrl, alt: t('share.title'), 'data-test': 'share-img' }));
       const row = h('div', { class: 'col' });
       if (navigator.share) {
-        row.append(h('button', { class: 'btn primary big', 'data-test': 'share-native', onclick: async () => {
+        add(row, h('button', { class: 'btn primary big', 'data-test': 'share-native', onclick: async () => {
           try {
             const blob = await toBlob(canvas);
             const file = blob && typeof File !== 'undefined' ? new File([blob], 'acik-ofis.png', { type: 'image/png' }) : null;
@@ -71,11 +71,11 @@ export function openShare(ui, ctrl, snapshot) {
           } catch (e) { if (!e || e.name !== 'AbortError') ui.toast(t('share.fail')); }
         } }, t('share.native')));
       }
-      row.append(
+      add(row, 
         h('button', { class: 'btn big' + (navigator.share ? '' : ' primary'), 'data-test': 'share-download', onclick: async () => { download(await toBlob(canvas) || dataUrl, 'acik-ofis.png'); ui.toast(t('share.downloaded'), 'ok'); } }, t('share.download')),
         h('button', { class: 'btn big', 'data-test': 'share-copy', onclick: async () => { const ok = await copyText(text + ' ' + url); ui.toast(ok ? t('share.copied') : url, ok ? 'ok' : ''); } }, t('share.copy')),
         h('button', { class: 'btn ghost', onclick: close }, t('share.close')));
-      box.append(row);
+      add(box, row);
     }, { cls: 'share' });
   });
 }

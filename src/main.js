@@ -7,6 +7,7 @@ import { OfficeScene } from './render/OfficeScene.js';
 import { UI } from './ui/ui.js';
 import { CloudSync, rememberReferral } from './cloud/cloud.js';
 import { CloudUI } from './cloud/cloudUi.js';
+import { LeaderboardUI } from './cloud/leaderboard.js';
 import './style.css';
 
 // Locales: every src/locales/<code>.json is picked up automatically (tr = source + fallback).
@@ -43,14 +44,22 @@ const install = {
   ios: () => isIos
 };
 
+const lbHolder = { show: () => leaderboard && leaderboard.show() };
+let leaderboard = null;
 const ui = new UI(document.getElementById('ui'), ctrl, {
   cloud: cloudUi,
+  leaderboard: lbHolder,
   install,
   zoom: (f) => scene && scene.zoomBy(f, scene.scale.width / 2, scene.scale.height / 2),
   snapshot: (cb) => snapshot(cb),
   onReset: () => { ctrl.reset(); },
   changeLocale
 });
+
+leaderboard = new LeaderboardUI(cloud, ui);
+// v2: anonymous stage counter (event name only; no user id, works for guests too)
+ctrl.on('count', (name) => { cloud.client.countEvent(name).catch(() => {}); });
+ctrl.countStage();
 
 const s0 = size();
 const game = new Phaser.Game({
@@ -109,7 +118,7 @@ window.addEventListener('pagehide', () => ctrl.save());
 if (ctrl.pendingWelcome) ui.showWelcome(ctrl.pendingWelcome);
 
 // Test/debug handle (no secrets; read-only helpers + controller)
-window.__acikOfis = { ctrl, ui, cloud, game, scene: null, version: __APP_VERSION__ };
+window.__acikOfis = { ctrl, ui, cloud, leaderboard, game, scene: null, version: __APP_VERSION__ };
 
 // Service worker (production only): versioned cache-first; show "new version" toast.
 let updateRequested = false;

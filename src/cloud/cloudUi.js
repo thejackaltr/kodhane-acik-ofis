@@ -1,5 +1,5 @@
 // Cloud save UI (ask step around minute 5 + menu panel). Non-technical copy from tr.json.
-import { h, clear } from '../ui/dom.js';
+import { h, clear, add } from '../ui/dom.js';
 import { t } from '../logic/i18n.js';
 
 function hhmm(ts) { const d = new Date(ts); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
@@ -23,7 +23,7 @@ export class CloudUI {
       if (s.status === 'syncing') st = t('cloud.syncing');
       else if (s.status === 'error') st = t(s.message || 'cloud.unreachable');
       else if (s.lastPushAt) st = t('cloud.synced', { t: hhmm(s.lastPushAt) });
-      box.append(h('h2', { text: t('cloud.menu') }), h('p', { text: t('cloud.signedIn', { email: u.email || '' }) }),
+      add(box, h('h2', { text: t('cloud.menu') }), h('p', { text: t('cloud.signedIn', { email: u.email || '' }) }),
         h('p', { class: 'sync ' + (s.status === 'error' ? 'err' : 'ok'), 'data-test': 'cloud-status', text: st }),
         h('p', { class: 'dim', text: t('cloud.sameAccount') }),
         h('button', { class: 'btn primary', onclick: () => { s.ctrl.save(); s.reconciled ? s.pushNow(true) : s.reconcile(); } }, t('cloud.syncNow')),
@@ -31,8 +31,8 @@ export class CloudUI {
         h('button', { class: 'btn ghost', onclick: () => this.close() }, t('menu.close')));
       return;
     }
-    box.append(h('h2', { text: t('cloud.askTitle') }));
-    if (this.mode === 'ask') box.append(h('p', { 'data-test': 'cloud-ask', text: t('cloud.askText') }));
+    add(box, h('h2', { text: t('cloud.askTitle') }));
+    if (this.mode === 'ask') add(box, h('p', { 'data-test': 'cloud-ask', text: t('cloud.askText') }));
     const msg = h('p', { class: 'msg' + (s.status === 'error' ? ' err' : ''), 'data-test': 'cloud-msg', text: s.message ? t(s.message) : '' });
     if (s.pendingEmail && s.status !== 'sending') {
       const input = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '6', pattern: '[0-9]*', 'aria-label': t('cloud.codeLabel'), placeholder: '••••••', class: 'code', 'data-test': 'cloud-code' });
@@ -41,7 +41,7 @@ export class CloudUI {
       const left = Math.max(0, Math.ceil((s.cooldownUntil - Date.now()) / 1000));
       const resend = h('button', { class: 'btn ghost', disabled: left > 0, onclick: () => s.sendCode(s.pendingEmail) }, left > 0 ? t('cloud.resendIn', { s: left }) : t('cloud.resend'));
       if (left > 0) setTimeout(() => { if (this.box && this.box.isConnected && s.pendingEmail) this.render(); }, 1000);
-      box.append(h('p', null, t('cloud.sent') + ' ', h('b', { text: s.pendingEmail })), h('p', { class: 'dim', text: t('cloud.spam') }),
+      add(box, h('p', null, t('cloud.sent') + ' ', h('b', { text: s.pendingEmail })), h('p', { class: 'dim', text: t('cloud.spam') }),
         h('form', { class: 'col', onsubmit: (e) => { e.preventDefault(); go(); } },
           h('label', { class: 'dim', text: t('cloud.codeLabel') }), input,
           h('button', { class: 'btn primary', type: 'submit', disabled: s.status === 'verifying' }, s.status === 'verifying' ? t('cloud.verifying') : t('cloud.verify'))),
@@ -50,11 +50,11 @@ export class CloudUI {
       setTimeout(() => { try { input.focus(); } catch (e) { /* ignore */ } }, 50);
     } else {
       const input = h('input', { type: 'email', autocomplete: 'email', 'aria-label': t('cloud.emailLabel'), placeholder: t('cloud.emailPh'), 'data-test': 'cloud-email' });
-      box.append(h('form', { class: 'col', novalidate: true, onsubmit: (e) => { e.preventDefault(); s.sendCode(input.value.trim()); } },
+      add(box, h('form', { class: 'col', novalidate: true, onsubmit: (e) => { e.preventDefault(); s.sendCode(input.value.trim()); } },
         h('label', { class: 'dim', text: t('cloud.emailLabel') }), input,
         h('button', { class: 'btn primary', type: 'submit', disabled: s.status === 'sending', 'data-test': 'cloud-send' }, s.status === 'sending' ? t('cloud.sending') : t('cloud.send'))), msg,
         h('p', { class: 'dim', text: t('cloud.guestNote') }));
     }
-    box.append(h('button', { class: 'btn ghost', 'data-test': 'cloud-later', onclick: () => this.close() }, this.mode === 'ask' ? t('cloud.later') : t('menu.close')));
+    add(box, h('button', { class: 'btn ghost', 'data-test': 'cloud-later', onclick: () => this.close() }, this.mode === 'ask' ? t('cloud.later') : t('menu.close')));
   }
 }

@@ -41,7 +41,7 @@
     },
     "tasarimci": {
       "name": "Tasarımcı",
-      "desc": "Tasarım işlerini uçurur."
+      "desc": "Tasarım işlerini uçurur. Katıldığı projeler %{n} daha kazançlı."
     },
     "kidemli": {
       "name": "Senior",
@@ -50,6 +50,10 @@
     "yzajan": {
       "name": "Yapay Zekâ Ajanı",
       "desc": "Gece gündüz yazar, çay içmez."
+    },
+    "pm": {
+      "name": "Proje Yöneticisi",
+      "desc": "Toplantıyı beş dakikada bitirir. Yanındaki masalar %{n} daha hızlı."
     }
   },
   "projects": {
@@ -75,7 +79,8 @@
     "stajyer": "Yalnız yetişmiyor. Bir stajyer al?",
     "masa": "Stajyerin masa istiyor. Boş bir yere dokun.",
     "masaFine": "Stajyerin masa istiyor. Boş bir yere tıkla.",
-    "teklif": "Yeni teklif geldi, Teklifler'e bak."
+    "teklif": "Yeni teklif geldi, Teklifler'e bak.",
+    "pm": "Proje Yöneticisini masaların ortasına koy, yanındaki herkes hızlanır."
   },
   "offers": {
     "title": "Teklifler",
@@ -118,7 +123,11 @@
     "moveDesc": "Daha büyük bir yer, yeni görünüm, projeler %50 daha kazançlı.",
     "moveLocked": "Toplam {v} kazanınca taşınabilirsin",
     "future": "{stage}: yakında",
-    "noSpace": "Bu katta yer kalmadı. Taşınma zamanı!"
+    "noSpace": "Bu katta yer kalmadı. Taşınma zamanı!",
+    "items": "Eşyalar",
+    "place": "Yerleştir",
+    "itemCount": "{n}/{max}",
+    "itemMax": "Hepsi yerleşti"
   },
   "upgrades": {
     "demlik": {
@@ -143,7 +152,8 @@
     "costHire": "Masa + {name}: {v}",
     "cancel": "Vazgeç",
     "bad": "Buraya sığmıyor.",
-    "noMoney": "Para yetmiyor."
+    "noMoney": "Para yetmiyor.",
+    "costItem": "{name}: {v}"
   },
   "bubbles": {
     "work": [
@@ -184,6 +194,11 @@
       "Teslim!",
       "Müşteri mutlu.",
       "Fatura kesildi."
+    ],
+    "pm": [
+      "Bunu bir toplantıda konuşalım.",
+      "Takvime ekledim.",
+      "Hangi sprintteyiz?"
     ]
   },
   "toast": {
@@ -235,6 +250,49 @@
       "b": "Yarın bakarız",
       "ra": "Sabaha karşı büyük ilerleme. Ekip biraz yorgun.",
       "rb": "Müşteri bekleyebileceğini söyledi."
+    },
+    "sunucu": {
+      "text": "Sunucu çöktü!",
+      "sub": "Tüm projeler durdu. Herkes aynı anda “bende açılıyor” diyor.",
+      "subRack": "Sunucu rafındaki yedekler devrede ama her şey yavaşladı.",
+      "a": "Hemen müdahale et",
+      "b": "Kendiliğinden düzelsin",
+      "ra": "Acil ekip devrede, kısa sürede toparlanacak.",
+      "rb": "Sunucu yeniden başlatılıyor…"
+    },
+    "kedi": {
+      "text": "Ofis Kedisi klavyeye yattı, commit gitti.",
+      "sub": "Commit mesajı: “ffffffjjjjjjj”.",
+      "a": "Commit’i geri al",
+      "b": "Canlıya çıksın",
+      "ra": "Commit geri alındı, kedi ofisten uzaklaştırıldı.",
+      "rbWin": "“Yeni özellik” diye satıldı.",
+      "rbLose": "Küçük bir hata çıktı, ekip düzeltiyor."
+    },
+    "toplanti": {
+      "text": "Toplantı olmasın, kısa bir görüşme yapalım.",
+      "sub": "Takvimde “kısa” diye bir buçuk saat ayrılmış.",
+      "a": "Katıl",
+      "b": "E-postayla yanıtla",
+      "ra": "Görüşme uzadı ama müşteri memnun.",
+      "raPm": "Proje Yöneticisi görüşmeyi beş dakikada bitirdi, müşteri memnun.",
+      "rb": "Müşteri biraz bozuldu."
+    },
+    "final": {
+      "text": "Final_v7_son_bu_kesin.pdf geldi.",
+      "sub": "Ekte bir de “son_final_revize2.docx” var.",
+      "a": "Revizeleri işle",
+      "b": "v6’yı geri öner",
+      "ra": "v8 de gönderildi.",
+      "rb": "Meğer v6 daha iyiymiş."
+    },
+    "viral": {
+      "text": "Viral iş ağı paylaşımı",
+      "sub": "Ekibinin paylaşımı bir gecede herkesin akışına düştü.",
+      "a": "Klavye başına!",
+      "b": "Müşterilere yönlendir",
+      "ra": "Herkes kod yazıyor: 60 sn boyunca ekip daha hızlı!",
+      "rb": "Gelen kutusu doldu."
     }
   },
   "welcome": {
@@ -311,7 +369,8 @@
     "install": "Uygulama olarak yükle",
     "installIos": "iPhone'da: Paylaş ▸ Ana Ekrana Ekle",
     "stats": "{p} proje · {k} kedi uykusu · toplam {v}",
-    "language": "Dil"
+    "language": "Dil",
+    "leaderboard": "Sıralama"
   },
   "credits": {
     "title": "Hakkında",
@@ -330,7 +389,9 @@
     "desk": "Masa",
     "deskFree": "Boş masa, birini işe al.",
     "cat": "Ofis Kedisi",
-    "catDesc": "Klavyelere yatar, sevilmeyi sever."
+    "catDesc": "Klavyelere yatar, sevilmeyi sever.",
+    "speedBonus": "Bu masa %{n} daha hızlı.",
+    "rewardBonus": "Bu masadan teslim edilen projeler %{n} daha kazançlı."
   },
   "fmt": {
     "money": "{v} TL",
@@ -342,5 +403,71 @@
   "languages": {
     "tr": "Türkçe",
     "en": "English"
+  },
+  "items": {
+    "kahve": {
+      "name": "Kahve makinesi",
+      "desc": "Çay kadar sevilmese de iş görür.",
+      "effect": "Çevresindeki masalar %{n} daha hızlı."
+    },
+    "bitki": {
+      "name": "Ofis bitkisi",
+      "desc": "Kimse sulamıyor ama hâlâ yaşıyor.",
+      "effect": "Geniş bir alandaki masalar %{n} daha hızlı."
+    },
+    "sunucu": {
+      "name": "Sunucu rafı",
+      "desc": "Vınlıyor, ısınıyor, bir şeyler çalıştırıyor.",
+      "effect": "Çevresindeki masaların teslim ettiği projeler %{n} daha kazançlı."
+    },
+    "area": "Parlayan karolar bonus alır."
+  },
+  "stageUp": {
+    "studyo": "Kapıda adınız yazıyor. Müşteri artık ‘ekibiniz kaç kişi?’ diye sormaya çekinmiyor.",
+    "ajans": "Artık 'biz' diyorsunuz ve bunu gerçekten ciddi söylüyorsunuz.",
+    "share": "Paylaş",
+    "ok": "Harika"
+  },
+  "lb": {
+    "title": "Sıralama",
+    "tab": "Tüm Zamanlar",
+    "info": "Puan, oyuna başladığından beri kazandığın toplam para.",
+    "refresh": "Yenile",
+    "loading": "Sıralama derleniyor…",
+    "offline": "Sıralama için internet bağlantısı gerekli",
+    "failed": "Sıralama yüklenemedi. Bağlantını kontrol edip yenile.",
+    "empty": "Liste henüz boş. Birinciliği kapmak için tek proje yeter.",
+    "signIn": "Listeye girmek için giriş yap. İlerlemen de buluta kaydolur.",
+    "signInBtn": "Giriş yap",
+    "label": "Listede hangi adla görünmek istersin?",
+    "placeholder": "Takma ad",
+    "join": "Listeye gir",
+    "saving": "Kaydediliyor…",
+    "hint": "3-16 karakter. E-postan hiçbir yerde görünmez.",
+    "shared": "Takma adın Kodhane sıralamasıyla ortak.",
+    "you": "sen",
+    "ownRank": "Sen: #{n}",
+    "top": "Zirvedesin. Logoyu büyütmenin tam zamanı.",
+    "notYet": "Kaydın buluta yüklenince burada görüneceksin.",
+    "edit": "Takma adı değiştir",
+    "cancel": "Vazgeç",
+    "share": "Sıramı paylaş",
+    "shareText": "Kodhane: Açık Ofis sıralamasında #{n}. sıradayım! Sen de ofisini kur:",
+    "copied": "Paylaşım metni kopyalandı.",
+    "joined": "Sıralamaya katıldın! Takma adın: {v}",
+    "updated": "Takma adın güncellendi: {v}",
+    "pending": "Puanın kontrol ediliyor. Kısa süre içinde listede görünürsün.",
+    "hidden": "Takma adın listeden kaldırıldı. Yeni bir ad seçebilirsin.",
+    "profileFail": "Takma adın şu an kontrol edilemedi.",
+    "retry": "Tekrar dene",
+    "errors": {
+      "too_short": "Takma ad 3-16 karakter olmalı.",
+      "too_long": "Takma ad 3-16 karakter olmalı.",
+      "invalid_chars": "Harf, rakam, boşluk, - ve _ kullanabilirsin.",
+      "blocked": "Bu ad listeye uygun değil. Başka bir ad dene.",
+      "taken": "Bu ad kapılmış. Başka bir tane dene.",
+      "offline": "İnternet bağlantısı yok. Çevrimiçi olunca tekrar dene.",
+      "failed": "Takma ad kaydedilemedi. Biraz sonra tekrar dene."
+    }
   }
 }

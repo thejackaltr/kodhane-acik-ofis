@@ -1,13 +1,15 @@
 // Isometric office renderer (Phaser 3). Reads controller state, never mutates it except via controller actions.
 import Phaser from 'phaser';
-import { STAGES, GRID } from '../logic/config.js';
+import { STAGES, GRID, ITEMS, EVENTS } from '../logic/config.js';
+import * as E from '../logic/economy.js';
 import * as G from '../logic/grid.js';
 import { t, list } from '../logic/i18n.js';
 
 const A = 'a';                 // atlas key
 const S = 0.5;                 // source art is 2x
 const TAP_MOVE = 10, LONG_MS = 520;
-const BUBBLE_POOL = 3, COIN_POOL = 18;
+const BUBBLE_POOL = 3, COIN_POOL = 18, FX_POOL = 24;
+const FLOORS = { ev: ['zemin_parke_01', 'zemin_parke_02', 'zemin_hali_01'], studyo: ['zemin_beton_01', 'zemin_beton_02', 'zemin_hali_01'], ajans: ['zemin_ajans_01', 'zemin_ajans_02', 'zemin_hali_02'] };
 
 function rnd(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
@@ -16,8 +18,8 @@ export class OfficeScene extends Phaser.Scene {
     super('office');
     this.ctrl = ctrl; this.opts = opts || {};
     this.userZoom = 1; this.dpr = opts.dpr || 1;
-    this.staffSprites = new Map(); this.deskSprites = new Map();
-    this.world = []; this.hl = [];
+    this.staffSprites = new Map(); this.deskSprites = new Map(); this.itemSprites = new Map();
+    this.world = []; this.hl = []; this.glows = []; this.glowTimer = null; this.pendingTile = null;
     this.animT = 0; this.frameToggle = false;
     this.bubbleT = 3; this.cat = null;
   }
@@ -34,6 +36,8 @@ export class OfficeScene extends Phaser.Scene {
       c.on('reload', () => { this.buildAll(); this.fitCamera(true); }),
       c.on('hired', (r) => this.onHired(r)),
       c.on('deskPlaced', (d) => this.addDesk(d, true)),
+      c.on('itemPlaced', (it) => { this.addItem(it, true); this.flashGlow(); }),
+      c.on('event', (id) => this.playEventVisual(id)),
       c.on('promoted', (s) => this.refreshStaff(s)),
       c.on('delivered', (d) => this.onDelivered(d)),
       c.on('catNap', (e) => this.catNap(e)),
@@ -52,17 +56,18 @@ export class OfficeScene extends Phaser.Scene {
     this.world = [];
     for (const s of this.staffSprites.values()) s.destroy();
     for (const s of this.deskSprites.values()) s.destroy();
-    this.staffSprites.clear(); this.deskSprites.clear();
+    for (const s of this.itemSprites.values()) s.destroy();
+    this.staffSprites.clear(); this.deskSprites.clear(); this.itemSprites.clear();
   }
   buildAll() {
     this.clearWorld();
     const st = this.ctrl.state, stage = STAGES[st.stage], look = stage.look;
     const area = G.stageArea(st.stage);
     const rug = new Set((stage.rug || []).map(([x, y]) => x + ',' + y));
-    const floorA = look === 'ev' ? 'zemin_parke_01' : 'zemin_beton_01', floorB = look === 'ev' ? 'zemin_parke_02' : 'zemin_beton_02';
+    const [floorA, floorB, rugF] = FLOORS[look] || FLOORS.studyo;
     for (let gx = 0; gx < area.w; gx++) for (let gy = 0; gy < area.h; gy++) {
       const w = G.tileToWorld(gx, gy);
-      const f = rug.has(gx + ',' + gy) ? 'zemin_hali_01' : ((gx + gy) % 2 ? floorB : floorA);
+      const f = rug.has(gx + ',' + gy) ? rugF : ((gx + gy) % 2 ? floorB : floorA);
       this.world.push(this.img(f, w.x, w.y, -30000 + w.y * 0.01));
     }
     // back walls: right wall along gy=-0.5 (for each gx), left wall along gx=-0.5 (for each gy)
@@ -87,6 +92,7 @@ export class OfficeScene extends Phaser.Scene {
       }
     }
     for (const d of st.desks) this.addDesk(d, false);
+    for (const it of st.items || []) this.addItem(it, false);
     for (const s of st.staff) this.addStaff(s, false);
     this.addCat();
     this.bounds = this.computeBounds();
@@ -103,6 +109,42 @@ export class OfficeScene extends Phaser.Scene {
     o.setData('desk', d.id);
     this.deskSprites.set(d.id, o);
     if (animate) { o.y -= 30; o.setAlpha(0); this.tweens.add({ targets: o, y: w.y, alpha: 1, duration: 320, ease: 'Back.easeOut' }); this.puff(w.x + 16, w.y); }
+  }
+  // v2 area items
+  addItem(it, animate) {
+    const def = ITEMS[it.type]; if (!def) return;
+    const w = G.tileToWorld(it.gx, it.gy);
+    const o = this.img(def.kind, w.x, w.y, G.depthOf(w.x, w.y));
+    o.setData('item', it.id);
+    this.itemSprites.set(it.id, o);
+    if (it.type === 'kahve') { // steam from the cup
+      const steam = this.img('fx_buhar_01', w.x + 6, w.y - 50, 90000).setAlpha(0.6).setScale(S * 0.7);
+      this.tweens.add({ targets: steam, y: w.y - 58, alpha: 0.05, duration: 1600, repeat: -1, ease: 'Sine.easeOut' });
+      o.setData('fx', steam);
+      o.on('destroy', () => steam.destroy());
+    }
+    if (it.type === 'sunucu') this.tweens.add({ targets: o, alpha: 0.9, yoyo: true, repeat: -1, duration: 700 + Math.random() * 400 });
+    if (animate) { o.y -= 30; o.setAlpha(0); this.tweens.add({ targets: o, y: w.y, alpha: 1, duration: 320, ease: 'Back.easeOut' }); this.puff(w.x, w.y); }
+  }
+  // glowing tiles: Map "gx,gy" -> 'speed'|'reward' (+ optional preview tiles for an item about to be placed)
+  showGlow(map, preview) {
+    let i = 0;
+    const put = (gx, gy, kind, alpha) => {
+      let g = this.glows[i];
+      if (!g) { g = this.add.image(0, 0, A, 'sec_karo_alan_01').setScale(S).setDepth(-9000); this.glows.push(g); }
+      const w = G.tileToWorld(gx, gy);
+      g.setFrame(kind === 'reward' ? 'sec_karo_odul_01' : 'sec_karo_alan_01').setPosition(w.x, w.y).setVisible(true).setAlpha(alpha);
+      i++;
+    };
+    for (const [k, kind] of map || []) { const [x, y] = k.split(',').map(Number); put(x, y, kind, 0.8); }
+    if (preview) for (const [x, y] of preview.tiles) put(x, y, preview.kind, 1);
+    for (; i < this.glows.length; i++) this.glows[i].setVisible(false);
+  }
+  hideGlow() { for (const g of this.glows) g.setVisible(false); }
+  flashGlow(ms = 2600) {
+    this.showGlow(E.glowTiles(this.ctrl.state));
+    if (this.glowTimer) this.glowTimer.remove(false);
+    this.glowTimer = this.time.delayedCall(ms, () => { this.glowTimer = null; if (!this.ctrl.placing) this.hideGlow(); });
   }
   seatPos(deskId) {
     const d = this.ctrl.state.desks.find((x) => x.id === deskId);
@@ -189,6 +231,52 @@ export class OfficeScene extends Phaser.Scene {
     this.arrow = this.add.image(0, 0, A, 'ui_ok_01').setScale(S).setVisible(false).setDepth(210000).setOrigin(0.5, 1);
     this.tweens.add({ targets: this.arrow, scaleY: S * 0.85, yoyo: true, repeat: -1, duration: 420, ease: 'Sine.easeInOut' });
     this.ghost = this.add.image(0, 0, A, 'masa_tekli_laptop_01').setScale(S).setAlpha(0.75).setVisible(false).setDepth(180000);
+    this.fx = [];
+    for (let i = 0; i < FX_POOL; i++) this.fx.push(this.add.image(0, 0, A, 'fx_duman_01').setScale(S).setVisible(false).setDepth(195000));
+  }
+  fxImg(frame) { const o = this.fx.find((x) => !x.visible); if (!o) return null; o.setFrame(frame).setScale(S).setAlpha(1).setAngle(0).setVisible(true); return o; }
+  // v2: each "visual" event card makes something happen in the office while the card is open
+  playEventVisual(id) {
+    const ev = EVENTS[id]; if (!ev || !ev.visual) return;
+    const st = this.ctrl.state, fd = st.desks[0], fw = G.tileToWorld(fd.gx, fd.gy);
+    this.lastVisual = ev.visual;
+    const staffed = st.desks.filter((d) => st.staff.some((x) => x.deskId === d.id));
+    if (ev.visual === 'duman') { // smoke from the server rack(s), else from the founder laptop
+      const racks = [...this.itemSprites.entries()].filter(([iid]) => (st.items.find((x) => x.id === iid) || {}).type === 'sunucu').map(([, o]) => ({ x: o.x, y: o.y - 70 }));
+      const src = racks.length ? racks : [{ x: fw.x + 16, y: fw.y - 40 }];
+      let n = 0;
+      const ev2 = this.time.addEvent({ delay: 380, repeat: 22, callback: () => {
+        const p = src[n++ % src.length], o = this.fxImg('fx_duman_01'); if (!o) return;
+        o.setPosition(p.x + (Math.random() - 0.5) * 10, p.y).setScale(S * 0.6);
+        this.tweens.add({ targets: o, y: p.y - 50 - Math.random() * 20, x: o.x + (Math.random() - 0.3) * 24, scale: S * 1.2, alpha: 0, duration: 1800, onComplete: () => o.setVisible(false) });
+      } });
+      this.world.push({ destroy: () => ev2.remove(false) });
+    } else if (ev.visual === 'kedi') { // the office cat lies down on the founder's keyboard
+      this.catNap({ deskId: fd.id, sec: 14 });
+    } else if (ev.visual === 'takvim') { // calendar invites pop up over the team
+      const who = [...this.staffSprites.values()].slice(0, 10);
+      who.forEach((o, i) => this.time.delayedCall(i * 120, () => {
+        const f = this.fxImg('fx_takvim_01'); if (!f) return;
+        f.setPosition(o.x, o.y - 70).setScale(S * 0.3);
+        this.tweens.add({ targets: f, scale: S, y: o.y - 78, duration: 300, ease: 'Back.easeOut', onComplete: () => this.tweens.add({ targets: f, alpha: 0, delay: 2200, duration: 400, onComplete: () => f.setVisible(false) }) });
+      }));
+      const pm = st.staff.find((x) => x.type === 'pm'), po = pm && this.staffSprites.get(pm.id);
+      if (po) this.time.delayedCall(700, () => this.say(po, rnd(list('bubbles.pm')), 2600));
+    } else if (ev.visual === 'kagit') { // revision files fly in through the door to the founder desk
+      const door = STAGES[st.stage].door, dw = G.tileToWorld(door.gx, door.gy);
+      for (let i = 0; i < 8; i++) this.time.delayedCall(i * 160, () => {
+        const f = this.fxImg('fx_kagit_01'); if (!f) return;
+        f.setPosition(dw.x, dw.y - 40).setAngle(-30 + Math.random() * 60);
+        this.tweens.add({ targets: f, x: fw.x + 16 + (Math.random() - 0.5) * 20, y: fw.y - 30 - i * 2, angle: (Math.random() - 0.5) * 30, duration: 900, ease: 'Quad.easeInOut', onComplete: () => this.tweens.add({ targets: f, alpha: 0, delay: 1800, duration: 400, onComplete: () => f.setVisible(false) }) });
+      });
+    } else if (ev.visual === 'begeni') { // likes rise over every desk
+      const ds = staffed.length ? staffed : [fd];
+      for (let i = 0; i < 16; i++) this.time.delayedCall(i * 140, () => {
+        const d = ds[i % ds.length], w = G.tileToWorld(d.gx, d.gy), f = this.fxImg(i % 3 ? 'fx_begeni_01' : 'fx_kalp_01'); if (!f) return;
+        f.setPosition(w.x + 16 + (Math.random() - 0.5) * 20, w.y - 50);
+        this.tweens.add({ targets: f, y: w.y - 100 - Math.random() * 20, alpha: 0, duration: 1500, ease: 'Quad.easeOut', onComplete: () => f.setVisible(false) });
+      });
+    }
   }
   say(target, text, ms = 2200) {
     if (!target || !text) return;
@@ -243,8 +331,9 @@ export class OfficeScene extends Phaser.Scene {
   // ------------------------------------------------------------ placement mode
   showPlacement(p) {
     for (const h of this.hl) h.setVisible(false);
-    this.ghost.setVisible(false);
-    if (!p) return;
+    this.ghost.setVisible(false); this.pendingTile = null;
+    if (!p) { if (!this.glowTimer) this.hideGlow(); return; }
+    this.showGlow(E.glowTiles(this.ctrl.state));
     const spots = G.validSpots(this.ctrl.state, p.kind);
     let i = 0;
     for (const [gx, gy] of spots) {
@@ -264,6 +353,13 @@ export class OfficeScene extends Phaser.Scene {
     const w = G.tileToWorld(gx, gy);
     const ok = G.canPlace(this.ctrl.state, p.kind, gx, gy);
     this.ghost.setPosition(w.x, w.y).setVisible(true).setTint(ok ? 0xb8ffb8 : 0xff9090);
+    if (p.item) this.previewItem(p, gx, gy, ok);
+  }
+  // v2: an item about to be placed lights up its future area
+  previewItem(p, gx, gy, ok) {
+    const st = this.ctrl.state;
+    this.pendingTile = ok ? gx + ',' + gy : null;
+    this.showGlow(E.glowTiles(st), ok ? { tiles: E.itemPreviewTiles(st, p.item, gx, gy), kind: ITEMS[p.item].reward ? 'reward' : 'speed' } : null);
   }
 
   // ------------------------------------------------------------ tutorial arrow
@@ -281,7 +377,7 @@ export class OfficeScene extends Phaser.Scene {
     const vw = this.scale.width / this.dpr, vh = this.scale.height / this.dpr;
     const padTop = this.opts.padTop || 70, padBottom = this.opts.padBottom || 80;
     const fit = Math.min(vw / (b.w + 8), (vh - padTop - padBottom) / (b.h + 8));
-    this.fitZoom = Math.max(0.45, Math.min(2.2, fit));
+    this.fitZoom = Math.max(0.38, Math.min(2.2, fit));
     if (recenter) this.userZoom = this.fitZoom;
     this.userZoom = Phaser.Math.Clamp(this.userZoom, this.fitZoom * 0.7, 3);
     cam.setZoom(this.userZoom * this.dpr);
@@ -351,6 +447,7 @@ export class OfficeScene extends Phaser.Scene {
   }
   pick(wx, wy) {
     if (this.cat && this.cat.getBounds().contains(wx, wy)) return { kind: 'cat' };
+    for (const [id, o] of this.itemSprites) { const b = o.getBounds(); b.x += b.width * 0.2; b.width *= 0.6; if (b.contains(wx, wy)) return { kind: 'item', id }; }
     const staff = [...this.staffSprites.values()].sort((a, b) => b.depth - a.depth);
     for (const o of staff) {
       const b = o.getBounds(); b.x += b.width * 0.2; b.width *= 0.6; // tighter than the frame
@@ -359,6 +456,7 @@ export class OfficeScene extends Phaser.Scene {
     const { gx, gy } = G.worldToTile(wx, wy);
     const hit = G.occupancy(this.ctrl.state).get(gx + ',' + gy);
     if (hit && (hit.startsWith('desk:') || hit.startsWith('seat:'))) return { kind: 'desk', id: +hit.split(':')[1] };
+    if (hit && hit.startsWith('item:')) return { kind: 'item', id: +hit.split(':')[1] };
     // desk sprite bounds as a fallback (laptops stick up above their tiles)
     for (const [id, o] of this.deskSprites) if (o.getBounds().contains(wx, wy)) return { kind: 'desk', id };
     return { kind: 'tile', gx, gy };
@@ -367,6 +465,15 @@ export class OfficeScene extends Phaser.Scene {
     const c = this.ctrl;
     if (c.placing) {
       const { gx, gy } = G.worldToTile(wx, wy);
+      // items: first tap shows where the glow will be, a second tap on the same tile places it (mouse: hover + click)
+      if (c.placing.item && this.pendingTile !== gx + ',' + gy) {
+        const ok = G.inArea(c.state.stage, gx, gy) && G.canPlace(c.state, c.placing.kind, gx, gy);
+        if (!ok) { this.opts.onPlaceFail && this.opts.onPlaceFail('yer'); return; }
+        const w = G.tileToWorld(gx, gy);
+        this.ghost.setPosition(w.x, w.y).setVisible(true).setTint(0xb8ffb8);
+        this.previewItem(c.placing, gx, gy, true);
+        return;
+      }
       const r = c.placeAt(gx, gy);
       if (!r.ok) this.opts.onPlaceFail && this.opts.onPlaceFail(r.reason);
       return;
@@ -381,6 +488,7 @@ export class OfficeScene extends Phaser.Scene {
       if (r.worked) { this.typeFx(w.x + 16, w.y - 34); const o = this.staffSprites.get(founder.id); if (o) o.setFrame('calisan_kurucu_calis_02'); }
       return;
     }
+    if (hit.kind === 'item') { this.flashGlow(4000); this.opts.onInfo && this.opts.onInfo(hit); return; }
     if (hit.kind === 'staff' || hit.kind === 'desk') { this.opts.onInfo && this.opts.onInfo(hit); return; }
   }
   longPress(wx, wy) {
@@ -435,7 +543,7 @@ export class OfficeScene extends Phaser.Scene {
       const s = rnd(st.staff.filter((x) => x.type !== 'kurucu' || st.staff.length === 1));
       const o = s && this.staffSprites.get(s.id);
       if (o && !o.getData('walking')) {
-        const key = s.projectId == null ? 'bubbles.idle' : s.type === 'tasarimci' ? 'bubbles.design' : s.type === 'yzajan' ? 'bubbles.robot' : 'bubbles.work';
+        const key = s.projectId == null ? 'bubbles.idle' : s.type === 'tasarimci' ? 'bubbles.design' : s.type === 'yzajan' ? 'bubbles.robot' : s.type === 'pm' ? 'bubbles.pm' : 'bubbles.work';
         if (s.projectId != null || st.projects.length === 0) this.say(o, rnd(list(key)), 2200);
       }
     }

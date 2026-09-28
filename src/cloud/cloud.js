@@ -14,6 +14,9 @@ const DEFAULTS = {
   referralKey: 'acik_ofis_from_kodhane',       // opened from Kodhane (utm_source=kodhane), remembered locally
   referralCountedKey: 'acik_ofis_kodhane_signup_counted',
   countRpc: 'kodhane_count_event',
+  lbRpc: 'kodhane_leaderboard',                 // shared with Kodhane; p_game keeps the lists apart
+  lbGame: 'acik_ofis',
+  profileTable: 'kodhane_profiles',             // one nickname per account, shared with Kodhane
   pushDelayMs: 30000,
   timeoutMs: 15000
 };
@@ -96,6 +99,22 @@ export class CloudClient {
   }
   // anonymous per-day counter on the Kodhane Supabase (anon key only, never the user token; no personal data)
   countEvent(name) { return this.api('/rest/v1/rpc/' + this.cfg.countRpc, { method: 'POST', body: { p_event: name } }); }
+  // v2 leaderboard: guests call with the public key only; signed in, the user token lets the list flag "is_me"
+  async leaderboard(limit) {
+    const tok = this.session ? await this.token().catch(() => null) : null;
+    return this.api('/rest/v1/rpc/' + this.cfg.lbRpc, { method: 'POST', token: tok || undefined, body: { p_limit: limit || 50, p_game: this.cfg.lbGame } });
+  }
+  async getProfile() {
+    const tok = await this.token();
+    const rows = await this.api('/rest/v1/' + this.cfg.profileTable + '?select=nickname,hidden&user_id=eq.' + encodeURIComponent(this.user.id), { token: tok });
+    return Array.isArray(rows) && rows.length ? rows[0] : null;
+  }
+  async saveNickname(nickname) {
+    const tok = await this.token();
+    await this.api('/rest/v1/' + this.cfg.profileTable + '?on_conflict=user_id', {
+      method: 'POST', token: tok, headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: { user_id: this.user.id, nickname }
+    });
+  }
   async signOut() {
     const tok = this.session && this.session.access_token;
     this.clearSession();

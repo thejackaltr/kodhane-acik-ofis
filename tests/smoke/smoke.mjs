@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { grownSave } from './grown.mjs';
+import { grownSave, ajansSave } from './grown.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const shots = path.join(root, 'screenshots');
@@ -21,6 +21,29 @@ if (!base) {
 const exe = process.env.CHROME || ['/usr/bin/google-chrome', '/usr/bin/chromium'].find((p) => fs.existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const results = [];
+// v2: every context talks to a FAKE Supabase (nothing is counted or written on the real backend, also in the live smoke).
+// Counter calls are recorded per context; the leaderboard RPC answers with fake rows. A context may add its own route
+// afterwards (Playwright runs the newest matching route first).
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'content-type': 'application/json' };
+async function fakeBackend(ctx) {
+  const f = { counts: [], lbCalls: [], lb: [], profile: null, profilePosts: [], saves: [] };
+  await ctx.route('https://supabase.teserix.com/**', async (route) => {
+    const r = route.request(), u = new URL(r.url());
+    if (r.method() === 'OPTIONS') return route.fulfill({ status: 200, headers: CORS, body: '' });
+    const body = () => { try { return JSON.parse(r.postData() || 'null'); } catch (e) { return null; } };
+    if (u.pathname === '/rest/v1/rpc/kodhane_count_event') { f.counts.push(body().p_event); return route.fulfill({ status: 200, headers: CORS, body: 'true' }); }
+    if (u.pathname === '/rest/v1/rpc/kodhane_leaderboard') { f.lbCalls.push({ body: body(), auth: r.headers()['authorization'] || '' }); return route.fulfill({ status: 200, headers: CORS, body: JSON.stringify(f.lb) }); }
+    if (u.pathname === '/rest/v1/kodhane_profiles' && r.method() === 'GET') return route.fulfill({ status: 200, headers: CORS, body: JSON.stringify(f.profile ? [f.profile] : []) });
+    if (u.pathname === '/rest/v1/kodhane_profiles' && r.method() === 'POST') { const b = body(); f.profilePosts.push(b); f.profile = { nickname: b.nickname, hidden: false }; return route.fulfill({ status: 201, headers: CORS, body: '' }); }
+    if (u.pathname === '/rest/v1/acik_ofis_saves' && r.method() === 'GET') return route.fulfill({ status: 200, headers: CORS, body: JSON.stringify(f.saves) });
+    if (u.pathname === '/rest/v1/acik_ofis_saves' && r.method() === 'POST') { const b = body(); f.saves = [{ data: b.data, save_version: b.save_version, updated_at: b.updated_at }]; return route.fulfill({ status: 201, headers: CORS, body: '' }); }
+    return route.fulfill({ status: 404, headers: CORS, body: '{}' });
+  });
+  return f;
+}
+const newContextReal = browser.newContext.bind(browser);
+browser.newContext = async (opts) => { const c = await newContextReal(opts); c.fake = await fakeBackend(c); return c; };
+const FAKE_SESSION = JSON.stringify({ access_token: 'fake', refresh_token: 'fake', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: '00000000-0000-0000-0000-000000000002', email: 'smoke@example.invalid' } });
 function check(name, cond, info = '') { results.push([name, !!cond]); console.log((cond ? 'PASS ' : 'FAIL ') + name + (info ? ' — ' + info : '')); }
 
 // count WebGL draw calls per frame
@@ -63,6 +86,8 @@ const S = (p) => p.evaluate(() => { const s = window.__acikOfis.ctrl.state; retu
   for (let i = 0; i < 30 && (await S(p)).done < 1; i++) { await p.touchscreen.tap(lap.x, lap.y); await p.waitForTimeout(90); }
   let st = await S(p);
   check('m: first delivery, first money', st.done === 1 && st.money >= 90, JSON.stringify(st));
+  await p.waitForTimeout(300);
+  check('m: first delivery counts acikofis_stage_0 once (anonymous counter, fake backend)', JSON.stringify(ctx.fake.counts) === '["acikofis_stage_0"]', JSON.stringify(ctx.fake.counts));
   check('m: hint 3 (stajyer)', (await p.textContent('[data-test=hint]')) === 'Yalnız yetişmiyor. Bir stajyer al?');
   await p.tap('[data-test=nav-team]');
   await p.tap('[data-test=hire-btn-stajyer]');
@@ -116,7 +141,7 @@ const S = (p) => p.evaluate(() => { const s = window.__acikOfis.ctrl.state; retu
   check('m: share text (v1.0.1)', share && share.text === "Kodhane: Açık Ofis'te ekibim " + st.staff + ' kişi oldu, ' + (await S(p)).done + ' proje teslim ettik. Sen de ofisini kur:', share && share.text);
   check('m: share URL has UTM', share && share.url.includes('utm_source=share&utm_medium=office&utm_campaign=acik-ofis'), share && share.url);
   await p.screenshot({ path: path.join(shots, 'share-preview-mobile.png') });
-  const dlP = p.waitForEvent('download', { timeout: 5000 });
+  const dlP = p.waitForEvent('download', { timeout: 15000 });
   await p.tap('[data-test=share-download]');
   const dl = await dlP;
   const dlPath = await dl.path();
@@ -266,6 +291,157 @@ for (const vp of [{ name: 'mobile', viewport: { width: 390, height: 844 }, devic
   check('ref: no page errors', errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
+
+// ================================================================ v2 (Ajans): Ajans office, area items + glow, visual event cards
+const TR = JSON.parse(fs.readFileSync(path.join(root, 'src/locales/tr.json'), 'utf8'));
+const visibleGlows = (p) => p.evaluate(() => window.__acikOfis.scene.glows.filter((g) => g.visible).length);
+const hlSpot = (p, k = 0) => p.evaluate((k) => { const s = window.__acikOfis.scene; const v = s.hl.filter((x) => x.visible); const h = v[Math.min(k, v.length - 1)]; return h ? s.worldToCss(h.x, h.y) : null; }, k);
+for (const vp of [{ name: 'mobile', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, { name: 'desktop', viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 }]) {
+  const ctx = await browser.newContext({ ...vp, locale: 'tr-TR' });
+  await ctx.addInitScript(drawCounter);
+  const save = ajansSave(Date.now());
+  await ctx.addInitScript((s) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('acik_ofis_save_v1', JSON.stringify(s)); sessionStorage.setItem('seeded', '1'); } }, save);
+  const p = await ctx.newPage();
+  const errors = [];
+  p.on('pageerror', (e) => errors.push(e.message));
+  p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  await p.goto(base); await ready(p);
+  await p.waitForTimeout(1500);
+  const st = await S(p);
+  const v = vp.name === 'mobile' ? 'm2' : 'd2';
+  check(v + ': Ajans save loads (14x14, ' + save.staff.length + ' people, items)', st.staff === save.staff.length && (await p.textContent('.hud-stage')) === TR.stages.ajans &&
+    (await p.evaluate(() => window.__acikOfis.scene.itemSprites.size)) === save.items.length, JSON.stringify(st));
+  check(v + ': nothing counted again for an Ajans save that already counted its stages', ctx.fake.counts.length === 0, JSON.stringify(ctx.fake.counts));
+  await p.screenshot({ path: path.join(shots, 'v2-ajans-' + vp.name + '.png') });
+  const draws = await p.evaluate(() => window.__draws);
+  check(v + ': draw calls per frame (Ajans)', draws.calls / draws.frames < 20, 'avg ' + (draws.calls / draws.frames).toFixed(1) + ', max ' + draws.max);
+  // items sheet
+  await (vp.hasTouch ? p.tap('[data-test=nav-office]') : p.click('[data-test=nav-office]'));
+  await p.waitForSelector('[data-test=item-sunucu]');
+  const sheet = await p.textContent('.sheet');
+  check(v + ': Eşyalar section with Yazı\'s item texts', sheet.includes(TR.office.items) && ['kahve', 'bitki', 'sunucu'].every((k) => sheet.includes(TR.items[k].name)) && sheet.includes('Geniş bir alandaki masalar %8 daha hızlı.'), sheet.slice(0, 160));
+  if (vp.name === 'mobile') { await p.evaluate(() => document.querySelector('[data-test=item-kahve]').scrollIntoView({ block: 'center' })); await p.waitForTimeout(200); await p.screenshot({ path: path.join(shots, 'v2-items-sheet-mobile.png') }); }
+  const type = vp.name === 'mobile' ? 'bitki' : 'kahve';
+  const n0 = await p.evaluate(() => window.__acikOfis.ctrl.state.items.length);
+  await (vp.hasTouch ? p.tap('[data-test=item-btn-' + type + ']') : p.click('[data-test=item-btn-' + type + ']'));
+  await p.waitForTimeout(500);
+  check(v + ': item placement mode: hint = items.area, existing areas glow', (await p.textContent('[data-test=hint]')) === TR.items.area && (await visibleGlows(p)) > 0, await p.textContent('[data-test=hint]'));
+  const g0 = await visibleGlows(p);
+  const spot = await hlSpot(p, 40);
+  if (vp.hasTouch) {
+    await p.touchscreen.tap(spot.x, spot.y); await p.waitForTimeout(400);
+    const g1 = await visibleGlows(p);
+    check('m2: first tap only previews the item area (not placed yet, more tiles glow)', (await p.evaluate(() => window.__acikOfis.ctrl.state.items.length)) === n0 && g1 > g0, g0 + ' -> ' + g1);
+    await p.screenshot({ path: path.join(shots, 'v2-glow-mobile.png') });
+    await p.touchscreen.tap(spot.x, spot.y); await p.waitForTimeout(600);
+  } else {
+    await p.mouse.move(spot.x, spot.y); await p.waitForTimeout(300);
+    check('d2: mouse hover previews the item area', (await visibleGlows(p)) > g0);
+    await p.screenshot({ path: path.join(shots, 'v2-glow-desktop.png') });
+    await p.mouse.click(spot.x, spot.y); await p.waitForTimeout(600);
+  }
+  const it = await p.evaluate(() => { const c = window.__acikOfis.ctrl; return { n: c.state.items.length, last: c.state.items.at(-1), placing: !!c.placing }; });
+  check(v + ': item placed (' + type + '), placement mode closed, glow flashes', it.n === n0 + 1 && it.last.type === type && !it.placing && (await visibleGlows(p)) > 0, JSON.stringify(it));
+  // visual event card
+  const evId = vp.name === 'mobile' ? 'kedi' : 'sunucu';
+  await p.evaluate((id) => { const s = window.__acikOfis.ctrl.state; s.events.seen = ['logo', 'cuma', 'yegen', 'cay', 'acil', 'sunucu', 'kedi', 'toplanti', 'final', 'viral'].filter((x) => x !== id); s.events.nextAt = s.playSec; }, evId);
+  await p.waitForSelector('[data-test=event-text]', { timeout: 6000 });
+  await p.waitForTimeout(1600);
+  const ev = await p.evaluate(() => ({ visual: window.__acikOfis.scene.lastVisual, fx: window.__acikOfis.scene.fx.filter((x) => x.visible).length, sub: (document.querySelector('[data-test=event-sub]') || {}).textContent || '' }));
+  check(v + ': visual event card "' + evId + '" (Kodhane text) plays in the office', (await p.textContent('[data-test=event-text]')) === TR.events[evId].text &&
+    (evId === 'sunucu' ? ev.visual === 'duman' && ev.fx > 0 && ev.sub === TR.events.sunucu.subRack : ev.visual === 'kedi'), JSON.stringify(ev));
+  await p.screenshot({ path: path.join(shots, 'v2-event-' + evId + '-' + vp.name + '.png') });
+  await (vp.hasTouch ? p.tap('[data-test=event-a]') : p.click('[data-test=event-a]'));
+  await p.waitForTimeout(300);
+  check(v + ': event card closes', !(await p.$('[data-test=event-text]')));
+  if (vp.name === 'desktop') {
+    await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+    const pos = await p.evaluate(() => { const sc = window.__acikOfis.scene, s = window.__acikOfis.ctrl.state; const srv = s.items.find((x) => x.type === 'sunucu'); const o = sc.itemSprites.get(srv.id); return sc.worldToCss(o.x, o.y - 12); });
+    await p.mouse.click(pos.x, pos.y); await p.waitForTimeout(400);
+    check('d2: clicking the server rack shows its effect (items.sunucu.effect)', ((await p.textContent('[data-test=item-effect]').catch(() => '')) || '') === 'Çevresindeki masaların teslim ettiği projeler %25 daha kazançlı.', await p.textContent('.modal').catch(() => ''));
+  }
+  check(v + ': no console errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+
+// ================================================================ v2: first Proje Yöneticisi (tutorial.pm) + stage-up screen (Stüdyo -> Ajans)
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'tr-TR' });
+  const save = grownSave(Date.now()); save.totalEarned = 260000; save.money = 400000;
+  await ctx.addInitScript((s) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('acik_ofis_save_v1', JSON.stringify(s)); sessionStorage.setItem('seeded', '1'); } }, save);
+  const p = await ctx.newPage();
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  await p.goto(base); await ready(p); await p.waitForTimeout(800);
+  await p.tap('[data-test=nav-team]');
+  await p.tap('[data-test=hire-btn-pm]');
+  await p.waitForTimeout(400);
+  check('pm: placing the first Proje Yöneticisi shows tutorial.pm', (await p.textContent('[data-test=hint]')) === TR.tutorial.pm, await p.textContent('[data-test=hint]'));
+  await p.screenshot({ path: path.join(shots, 'v2-pm-tip-mobile.png') });
+  const spot = await hlSpot(p, 3);
+  await p.touchscreen.tap(spot.x, spot.y); await p.waitForTimeout(700);
+  const pm = await p.evaluate(() => { const s = window.__acikOfis.ctrl.state; return { pm: s.staff.filter((x) => x.type === 'pm').length, tip: s.flags.pmTip }; });
+  check('pm: hired at the chosen desk, tip marked as shown', pm.pm === 1 && pm.tip === true, JSON.stringify(pm));
+  await p.tap('[data-test=nav-office]');
+  await p.tap('[data-test=move]');
+  await p.waitForSelector('[data-test=stageup-text]', { timeout: 4000 });
+  await p.waitForTimeout(600);
+  check('stageup: congratulation screen with Yazı\'s text', (await p.textContent('[data-test=stageup-text]')) === "Artık 'biz' diyorsunuz ve bunu gerçekten ciddi söylüyorsunuz." &&
+    (await p.textContent('[data-test=stageup-title]')).includes(TR.stages.ajans), await p.textContent('[data-test=stageup-title]'));
+  await p.screenshot({ path: path.join(shots, 'v2-stageup-mobile.png') });
+  check('counter: stage_0/_1 once at start (fresh v2 save), stage_2 on the move', JSON.stringify(ctx.fake.counts) === '["acikofis_stage_0","acikofis_stage_1","acikofis_stage_2"]', JSON.stringify(ctx.fake.counts));
+  await p.tap('[data-test=stageup-share]');
+  await p.waitForSelector('[data-test=share-img]', { timeout: 8000 });
+  check('stageup: share button opens the share card', !!(await p.$('[data-test=share-img]')));
+  const mv = await p.evaluate(() => { const s = window.__acikOfis.ctrl.state; return { stage: s.stage, staff: s.staff.length, zoom: window.__acikOfis.scene.fitZoom }; });
+  check('stageup: now in the Ajans with the whole team', mv.stage === 2 && mv.staff === save.staff.length + 1, JSON.stringify(mv));
+  check('pm/stageup: no console errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+
+// ================================================================ v2: all-time leaderboard (p_game='acik_ofis', fake backend)
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'tr-TR' });
+  const f = ctx.fake;
+  const rows = [{ rank: 1, nickname: 'ÇaycıHüseyin', score: 48250000, stage: 2 }, { rank: 2, nickname: 'SmokeOfis', score: 12400000, stage: 2, is_me: true }, { rank: 3, nickname: 'kod-ustası_1', score: 3100000, stage: 1 }, { rank: 4, nickname: 'Ali Veli', score: 950000, stage: 2 }]
+    .map((r) => ({ is_me: false, status: 'ok', ...r }));
+  f.lb = rows; f.profile = { nickname: 'SmokeOfis', hidden: false };
+  const save = ajansSave(Date.now());
+  await ctx.addInitScript(([s, sess]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('acik_ofis_save_v1', JSON.stringify(s)); localStorage.setItem('acik_ofis_auth_v1', sess); sessionStorage.setItem('seeded', '1'); } }, [save, FAKE_SESSION]);
+  const p = await ctx.newPage();
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+  await p.goto(base); await ready(p); await p.waitForTimeout(1200);
+  await p.tap('[data-test=menu]');
+  await p.tap('[data-test=menu-leaderboard]');
+  await p.waitForSelector('[data-test=lb-row]', { timeout: 8000 });
+  await p.waitForTimeout(500);
+  const call = f.lbCalls.at(-1);
+  check('lb: asks for p_game=acik_ofis with the user token', call && call.body.p_game === 'acik_ofis' && call.auth === 'Bearer fake', JSON.stringify(call));
+  const lb = await p.evaluate(() => ({ rows: document.querySelectorAll('[data-test=lb-row]').length, me: (document.querySelector('.lb-row.me') || {}).textContent || '', own: (document.querySelector('[data-test=lb-own]') || {}).textContent || '', tab: document.querySelector('.lb-head .tag').textContent }));
+  check('lb: list with own row highlighted + own rank', lb.rows === 4 && lb.me.includes('SmokeOfis') && lb.own.includes('2') && lb.tab === TR.lb.tab, JSON.stringify(lb));
+  check('lb: no stray "null" text in the modal', !(await p.textContent('.modal')).includes('null'));
+  await p.screenshot({ path: path.join(shots, 'v2-leaderboard-mobile.png') });
+  f.lb = rows.filter((r) => !r.is_me).concat([{ rank: null, nickname: 'SmokeOfis', score: null, stage: null, is_me: true, status: 'pending' }]);
+  await p.tap('[data-test=lb-refresh]'); await p.waitForTimeout(900);
+  check('lb: pending state for an implausible own score', !!(await p.$('[data-test=lb-pending]')));
+  f.profile.hidden = true; f.lb = rows.filter((r) => !r.is_me).concat([{ rank: null, nickname: 'SmokeOfis', score: null, stage: null, is_me: true, status: 'hidden' }]);
+  await p.tap('[data-test=lb-refresh]'); await p.waitForTimeout(900);
+  check('lb: hidden state (admin hide switch)', !!(await p.$('[data-test=lb-hidden]')));
+  check('lb: no page errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+  // guest: list with the public key only, sign-in prompt instead of the nickname form
+  const g = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'tr-TR' });
+  g.fake.lb = rows.map((r) => ({ ...r, is_me: false }));
+  const q = await g.newPage();
+  await q.goto(base); await ready(q);
+  await q.tap('[data-test=menu]'); await q.waitForSelector('[data-test=menu-leaderboard]');
+  check('menu: no stray "null" text (optional buttons)', !(await q.textContent('.modal')).includes('null'));
+  await q.tap('[data-test=menu-leaderboard]');
+  await q.waitForSelector('[data-test=lb-row]', { timeout: 8000 });
+  const gc = g.fake.lbCalls.at(-1);
+  check('lb guest: public list + sign-in prompt, no user token', !!(await q.$('[data-test=lb-signin]')) && gc && !/Bearer fake/.test(gc.auth) && gc.body.p_game === 'acik_ofis', gc && JSON.stringify({ body: gc.body, userToken: /Bearer fake/.test(gc.auth) }));
+  await g.close();
+}
+
 
 // ================================================================ +30% longer text (pseudo-locale) layout check
 {

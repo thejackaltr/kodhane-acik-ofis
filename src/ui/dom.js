@@ -12,4 +12,6 @@ export function h(tag, attrs, ...kids) {
   for (const c of kids.flat()) if (c != null && c !== false) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
   return el;
 }
+// append children, skipping null/false (Element.append(null) would print the text "null")
+export function add(el, ...kids) { for (const c of kids.flat()) if (c != null && c !== false) el.append(c); return el; }
 export function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }

@@ -1,6 +1,6 @@
 // Core economy + simulation (pure; no DOM, no Phaser). Time is passed in explicitly.
-import { CFG, STAFF, DESK, STAGES, UPGRADES, SAVE_VERSION, PROMOTE, PROMOTE_DISCOUNT } from './config.js';
-import { canPlace, occupancy } from './grid.js';
+import { CFG, STAFF, DESK, STAGES, UPGRADES, SAVE_VERSION, PROMOTE, PROMOTE_DISCOUNT, ITEMS } from './config.js';
+import { canPlace, occupancy, deskTiles, chebDist, areaTiles, ringTiles } from './grid.js';
 import * as R from './rng.js';
 
 export const PROJECT_KEYS = ['kafe', 'berber', 'pastane', 'dernek', 'apartman', 'kirtasiye', 'nalbur', 'dugun', 'spor', 'pansiyon', 'balikci', 'veteriner', 'kuafor', 'firin', 'oto'];
@@ -22,8 +22,9 @@ export function newState(now, seed) {
     projects: [],
     buffs: [],
     upgrades: [],
+    items: [],                      // v2: placed area items { id, type, gx, gy }
     tutorial: { step: 0, done: false },
-    flags: { firstOfferGiven: false, cloudAsked: false },
+    flags: { firstOfferGiven: false, cloudAsked: false, pmTip: false, stagesCounted: [] },
     events: { nextAt: CFG.eventFirstAtPlaySec, seen: [], pending: null }
   };
 }
@@ -40,16 +41,85 @@ export function buffMult(state) {
   return m;
 }
 export function speedMult(state) { return upgradeMult(state) * buffMult(state); }
-export function staffRate(state, s) { const t = STAFF[s.type]; const m = speedMult(state); return { kod: t.kod * m, tasarim: t.tasarim * m }; }
+
+// ---------------------------------------------------------------- v2: placement bonuses
+// Per desk: speed = kahve/bitki area (best of each type) + next to a Proje Yöneticisi's desk; reward = sunucu area.
+const layoutCache = new WeakMap();
+function layoutSig(state) {
+  const it = state.items || [], d = state.desks;
+  let pm = '';
+  for (const s of state.staff) if (STAFF[s.type] && STAFF[s.type].adjSpeed) pm += s.deskId + ',';
+  return d.length + ':' + (d.length ? d[d.length - 1].id : 0) + ':' + it.length + ':' + (it.length ? it[it.length - 1].id : 0) + ':' + pm + ':' + state.stage;
+}
+export function layoutBonus(state) {
+  const sig = layoutSig(state), c = layoutCache.get(state);
+  if (c && c.sig === sig) return c.val;
+  const speed = new Map(), reward = new Map(), items = state.items || [];
+  const pmDesks = [];
+  for (const s of state.staff) { const t = STAFF[s.type]; if (t && t.adjSpeed) { const d = state.desks.find((x) => x.id === s.deskId); if (d) pmDesks.push({ d, pct: t.adjSpeed, tiles: deskTiles(d) }); } }
+  for (const d of state.desks) {
+    const tiles = deskTiles(d);
+    const best = {};
+    for (const it of items) {
+      const def = ITEMS[it.type]; if (!def) continue;
+      if (chebDist(tiles, [[it.gx, it.gy]]) > def.radius) continue;
+      best[it.type] = true;
+    }
+    let sp = 0, rw = 0;
+    for (const type of Object.keys(best)) { sp += ITEMS[type].speed || 0; rw += ITEMS[type].reward || 0; }
+    let pmBest = 0;
+    for (const p of pmDesks) if (p.d.id !== d.id && chebDist(tiles, p.tiles) <= 1) pmBest = Math.max(pmBest, p.pct);
+    sp += pmBest;
+    if (sp) speed.set(d.id, sp);
+    if (rw) reward.set(d.id, rw);
+  }
+  const val = { speed, reward };
+  layoutCache.set(state, { sig, val });
+  return val;
+}
+export function deskSpeedBonus(state, deskId) { return layoutBonus(state).speed.get(deskId) || 0; }
+export function deskRewardBonus(state, deskId) { return layoutBonus(state).reward.get(deskId) || 0; }
+// glowing tiles: every item's area + the ring around each Proje Yöneticisi's desk. Map "gx,gy" -> 'speed'|'reward'
+export function glowTiles(state) {
+  const out = new Map();
+  for (const it of state.items || []) {
+    const def = ITEMS[it.type]; if (!def) continue;
+    for (const [x, y] of areaTiles(state.stage, it.gx, it.gy, def.radius)) { const k = x + ',' + y; if (out.get(k) !== 'reward') out.set(k, def.reward ? 'reward' : 'speed'); }
+  }
+  for (const s of state.staff) {
+    const t = STAFF[s.type]; if (!t || !t.adjSpeed) continue;
+    const d = state.desks.find((x) => x.id === s.deskId); if (!d) continue;
+    for (const [x, y] of ringTiles(state.stage, deskTiles(d))) { const k = x + ',' + y; if (!out.has(k)) out.set(k, 'speed'); }
+  }
+  return out;
+}
+// tiles a new item of this type would light up if placed at (gx,gy)
+export function itemPreviewTiles(state, type, gx, gy) { const def = ITEMS[type]; return def ? areaTiles(state.stage, gx, gy, def.radius) : []; }
+
+export function staffRate(state, s) {
+  const t = STAFF[s.type]; const m = speedMult(state) * (1 + deskSpeedBonus(state, s.deskId));
+  return { kod: t.kod * m, tasarim: t.tasarim * m };
+}
 export function teamRate(state) {
-  let kod = 0, tasarim = 0; const m = speedMult(state);
-  for (const s of state.staff) { const t = STAFF[s.type]; kod += t.kod * m; tasarim += t.tasarim * m; }
+  let kod = 0, tasarim = 0;
+  for (const s of state.staff) { const r = staffRate(state, s); kod += r.kod; tasarim += r.tasarim; }
   return { kod, tasarim };
 }
 export function projectRate(state, p) {
-  let kod = 0, tasarim = 0; const m = speedMult(state);
-  for (const s of state.staff) if (s.projectId === p.id) { const t = STAFF[s.type]; kod += t.kod * m; tasarim += t.tasarim * m; }
+  let kod = 0, tasarim = 0;
+  for (const s of state.staff) if (s.projectId === p.id) { const r = staffRate(state, s); kod += r.kod; tasarim += r.tasarim; }
   return { kod, tasarim };
+}
+// reward bonus a project would get if delivered now: Tasarımcı on it (+projectBonus) + someone in a sunucu area
+export function projectBonus(state, p) {
+  let tas = 0, srv = 0;
+  for (const s of state.staff) {
+    if (s.projectId !== p.id) continue;
+    const t = STAFF[s.type];
+    if (t && t.projectBonus) tas = Math.max(tas, t.projectBonus);
+    srv = Math.max(srv, deskRewardBonus(state, s.deskId));
+  }
+  return tas + srv;
 }
 export function projectRemainingSec(state, p) {
   const r = projectRate(state, p);
@@ -64,14 +134,23 @@ export function projectProgress(p) {
 }
 // Estimated income per minute if the team is always busy (for the HUD)
 export function incomePerMin(state) {
-  const r = teamRate(state), st = STAGES[state.stage];
-  return 60 * (r.kod + r.tasarim * CFG.tasarimPremium) * CFG.payPerUnit * st.mult;
+  const st = STAGES[state.stage];
+  const tas = state.staff.some((s) => STAFF[s.type] && STAFF[s.type].projectBonus) ? 1 : 0;
+  let v = 0;
+  for (const s of state.staff) {
+    const r = staffRate(state, s);
+    v += (r.kod + r.tasarim * CFG.tasarimPremium) * (1 + deskRewardBonus(state, s.deskId) + tas * STAFF.tasarimci.projectBonus * 0.5);
+  }
+  return 60 * v * CFG.payPerUnit * st.mult;
 }
 
 // ---------------------------------------------------------------- costs
 export function countType(state, type) { return state.staff.filter((s) => s.type === type).length; }
 export function staffCost(state, type) { return Math.round(STAFF[type].cost * Math.pow(CFG.staffCostGrowth, countType(state, type))); }
-export function deskCost(state) { return Math.round(DESK.base * Math.pow(CFG.deskCostGrowth, Math.max(0, state.desks.length - 1))); }
+export function deskCost(state) {
+  const n = Math.max(0, state.desks.length - 1), early = Math.min(n, CFG.deskCostGrowthFrom - 1);
+  return Math.round(DESK.base * Math.pow(CFG.deskCostGrowth, early) * Math.pow(CFG.deskCostGrowthLate, n - early));
+}
 export function freeDesk(state) {
   const used = new Set(state.staff.map((s) => s.deskId));
   return state.desks.find((d) => !used.has(d.id)) || null;
@@ -82,6 +161,24 @@ export function isUnlocked(state, type) {
   if (t.unlockStage && state.stage < t.unlockStage) return false;
   if (t.unlockEarned && state.totalEarned < t.unlockEarned) return false;
   return true;
+}
+// v2: area items
+export function itemCount(state, type) { return (state.items || []).filter((x) => x.type === type).length; }
+export function itemCost(state, type) { const d = ITEMS[type]; return Math.round(d.cost * Math.pow(d.growth, itemCount(state, type))); }
+export function itemUnlocked(state, type) { const d = ITEMS[type]; return !!d && state.stage >= (d.unlockStage || 0); }
+export function itemAvailable(state, type) { return itemUnlocked(state, type) && itemCount(state, type) < ITEMS[type].max; }
+export function buyItem(state, type, gx, gy) {
+  const d = ITEMS[type];
+  if (!d || !itemUnlocked(state, type)) return { ok: false, reason: 'kilitli' };
+  if (itemCount(state, type) >= d.max) return { ok: false, reason: 'max' };
+  const cost = itemCost(state, type);
+  if (state.money < cost) return { ok: false, reason: 'para' };
+  if (!canPlace(state, d.kind, gx, gy)) return { ok: false, reason: 'yer' };
+  state.money -= cost;
+  if (!state.items) state.items = [];
+  const it = { id: state.nextId++, type, gx, gy };
+  state.items.push(it);
+  return { ok: true, item: it, cost };
 }
 export function maxActiveProjects(state) { return Math.min(4, 1 + Math.floor((state.staff.length - 1) / 3)); }
 export function autoAccept(state) { return state.upgrades.some((id) => UPGRADES[id] && UPGRADES[id].autoAccept); }
@@ -140,11 +237,13 @@ export function assignStaff(state, staffId, projectId) {
   return true;
 }
 function completeProject(state, p, out) {
+  const bonus = projectBonus(state, p);             // v2: Tasarımcı + sunucu area
+  const pay = Math.round(p.pay * (1 + bonus));
   const i = state.projects.indexOf(p);
   if (i >= 0) state.projects.splice(i, 1);
   for (const s of state.staff) if (s.projectId === p.id) s.projectId = null;
-  state.money += p.pay; state.totalEarned += p.pay; state.projectsDone += 1;
-  if (out) { out.delivered.push({ id: p.id, key: p.key, pay: p.pay }); out.earned += p.pay; }
+  state.money += pay; state.totalEarned += pay; state.projectsDone += 1;
+  if (out) { out.delivered.push({ id: p.id, key: p.key, pay, base: p.pay, bonus }); out.earned += pay; }
   rebalance(state);
 }
 // laptop tap: the founder types faster

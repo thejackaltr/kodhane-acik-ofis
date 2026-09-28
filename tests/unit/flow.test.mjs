@@ -9,7 +9,7 @@ import * as S from '../../src/logic/save.js';
 import * as SY from '../../src/logic/sync.js';
 import * as I from '../../src/logic/i18n.js';
 import { fmt, tl, fmtDuration } from '../../src/logic/format.js';
-import { CFG, EVENT_ORDER, STAFF_ORDER, UPGRADE_ORDER } from '../../src/logic/config.js';
+import { CFG, EVENTS, EVENT_ORDER, STAFF_ORDER, UPGRADE_ORDER } from '../../src/logic/config.js';
 
 const T0 = Date.UTC(2026, 8, 28, 9, 0, 0);
 const tr = JSON.parse(fs.readFileSync(new URL('../../src/locales/tr.json', import.meta.url)));
@@ -60,7 +60,8 @@ test('events: first card is the logo one, not before first hire; choices apply',
   assert.equal(s.events.pending, null);
   assert.ok(s.events.nextAt > s.playSec);
   for (const id of EVENT_ORDER) {
-    for (const k of ['text', 'a', 'b', 'ra', 'rb']) assert.ok(typeof tr.events[id][k] === 'string', id + '.' + k);
+    const keys = ['text', 'a', 'b', 'ra', ...(EVENTS[id].b.chance ? ['rbWin', 'rbLose'] : ['rb'])];
+    for (const k of keys) assert.ok(typeof tr.events[id][k] === 'string', id + '.' + k);
   }
   assert.equal(tr.events.logo.text, 'Müşteri: Logoyu biraz daha büyütebilir miyiz?');
 });
@@ -111,7 +112,7 @@ test('save/load round trip + migration of broken saves', () => {
   assert.deepEqual(l.desks, s.desks);
   assert.equal(S.deserialize('{nope', T0), null);
   const m = S.migrate({ money: -5, totalEarned: 'x', staff: [{ id: 1, type: 'stajyer', deskId: 999 }], desks: [], stage: 7 }, T0);
-  assert.equal(m.money, 0); assert.equal(m.totalEarned, 0); assert.equal(m.stage, 1);
+  assert.equal(m.money, 0); assert.equal(m.totalEarned, 0); assert.equal(m.stage, 2, 'clamped to the last stage (v2: Ajans)');
   assert.ok(m.staff.some((x) => x.type === 'kurucu'));
   assert.ok(m.staff.every((x) => m.desks.some((d) => d.id === x.deskId)));
   assert.equal(S.load(memStorage(), T0), null);

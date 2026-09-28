@@ -33,7 +33,31 @@ export function occupancy(state) {
   for (const d of st.decor) mark(footprint(d.kind, d.gx, d.gy), 'decor');
   if (st.door) { mark([[st.door.gx, st.door.gy], [st.door.gx + 1, st.door.gy]], 'door'); }
   for (const d of state.desks) { mark(footprint(d.kind, d.gx, d.gy), 'desk:' + d.id); mark(reserved(d.kind, d.gx, d.gy), 'seat:' + d.id); }
+  for (const it of state.items || []) mark([[it.gx, it.gy]], 'item:' + it.id);
   return occ;
+}
+// every tile a desk uses (desk + chair row) — a desk gets an area bonus when any of these tiles glows
+export function deskTiles(d) { return footprint(d.kind, d.gx, d.gy).concat(reserved(d.kind, d.gx, d.gy)); }
+// tiles within Chebyshev distance r of (gx,gy), clipped to the stage area
+export function areaTiles(stage, gx, gy, r) {
+  const out = [];
+  for (let x = gx - r; x <= gx + r; x++) for (let y = gy - r; y <= gy + r; y++) if (inArea(stage, x, y)) out.push([x, y]);
+  return out;
+}
+// ring of tiles around a set of tiles (distance 1), without the tiles themselves
+export function ringTiles(stage, tiles) {
+  const own = new Set(tiles.map(([x, y]) => x + ',' + y)), seen = new Set(), out = [];
+  for (const [tx, ty] of tiles) for (let x = tx - 1; x <= tx + 1; x++) for (let y = ty - 1; y <= ty + 1; y++) {
+    const k = x + ',' + y;
+    if (own.has(k) || seen.has(k) || !inArea(stage, x, y)) continue;
+    seen.add(k); out.push([x, y]);
+  }
+  return out;
+}
+export function chebDist(tilesA, tilesB) {
+  let best = Infinity;
+  for (const [ax, ay] of tilesA) for (const [bx, by] of tilesB) best = Math.min(best, Math.max(Math.abs(ax - bx), Math.abs(ay - by)));
+  return best;
 }
 
 export function canPlace(state, kind, gx, gy, occ) {

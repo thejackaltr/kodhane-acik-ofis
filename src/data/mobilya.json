@@ -169,6 +169,20 @@
    128
   ]
  },
+ "esya_bitki_02": {
+  "boyut": [
+   1,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   162
+  ]
+ },
  "esya_kitaplik_01": {
   "boyut": [
    1,
@@ -223,6 +237,48 @@
   "pivotPx": [
    64,
    92
+  ]
+ },
+ "esya_toplanti_01": {
+  "boyut": [
+   2,
+   2
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   128,
+   122
+  ]
+ },
+ "esya_kahve_01": {
+  "boyut": [
+   1,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   142
+  ]
+ },
+ "esya_sunucu_01": {
+  "boyut": [
+   1,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   202
   ]
  }
 }

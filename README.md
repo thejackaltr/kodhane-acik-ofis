@@ -4,7 +4,15 @@ Mahalle dairesinde bir laptop ve demlenen çayla başla: müşteri tekliflerini 
 
 **Oyna:** https://thejackaltr.github.io/kodhane-acik-ofis/
 
-![Büyümüş ofis](screenshots/office-grown-desktop.png)
+![Ajans](screenshots/v2-ajans-desktop.png)
+
+## v2 (Ajans) ile gelenler
+- Üçüncü aşama **Ajans**: 14×14 oda, cam vitrinli duvarlar, gri meşe zemin, toplantı masası; taşınınca tebrik ekranı + "Paylaş".
+- Yerleşim önemli: **Proje Yöneticisi** (yanındaki masalar %25 hızlı), Tasarımcı'nın katıldığı projeler %20 daha kazançlı.
+- Alan eşyaları: **Kahve makinesi** (yakın alan, hız), **Ofis bitkisi** (geniş alan, hız), **Sunucu rafı** (yakın alan, proje ödülü). Bonus alan karolar parlar; dokunmatikte ilk dokunuş alanı gösterir, ikinci dokunuş yerleştirir.
+- 5 görsel olay kartı (sunucu dumanı, klavyede kedi, toplantı daveti, son dakika revizyonu, viral paylaşım).
+- Tüm zamanlar sıralaması (Kodhane takma adıyla ortak, `kodhane_leaderboard(p_game='acik_ofis')`), anonim aşama sayacı (`acikofis_stage_0..2`, kişisel veri yok).
+- v1 kayıtları kayıpsız taşınır (aynı anahtar `acik_ofis_save_v1`).
 
 ## v1'de neler var
 - Tek kat, sabit 10×10 izometrik ızgara (2:1, 64×32 karo). İki görünüm: **Ev Ofisi** (6×6 mahalle dairesi) ve taşınınca **Butik Stüdyo** (10×10). **Ajans** "yakında".
@@ -18,7 +26,7 @@ Mahalle dairesinde bir laptop ve demlenen çayla başla: müşteri tekliflerini 
 - Misafir oyun + yerel kayıt; isteğe bağlı bulut kaydı (Kodhane hesabıyla aynı hesap, 6 haneli e-posta koduyla giriş).
 - "Ofisimi paylaş": oyundan anlık görüntü + aşama adı + oyun adresi (UTM'li) içeren PNG; `navigator.share`, yoksa indir + bağlantıyı kopyala.
 - Yüklenebilir PWA, çevrimdışı çalışır (sürümlü, önce-önbellek service worker).
-- Ses, sıralama, çok kat, prestij v1'de yok.
+- Ses, çok kat, prestij, sektörler hâlâ yok.
 
 ## Kontroller
 Dokun: seç/yerleştir · sürükle: kaydır · iki parmak: yakınlaştır · basılı tut: bilgi kartı. Masaüstünde fare, tekerlek ve +/− düğmeleri. Laptopa dokunmak kurucunun daha hızlı yazmasını sağlar.
