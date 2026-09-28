@@ -32,6 +32,7 @@ export function applyChoice(state, choice) {
     p.done.tasarim = Math.min(p.need.tasarim, p.done.tasarim + p.need.tasarim * eff.projProgress);
   }
   if (eff.cashFromProject) {
+    if (!p) res.noProject = true;   // v2.1.1: result text may have an 'rNone' variant (events.viral.rbNone)
     const c = Math.round((p ? p.pay : 20) * eff.cashFromProject);
     state.money += c; state.totalEarned += c; res.cash += c;
   }

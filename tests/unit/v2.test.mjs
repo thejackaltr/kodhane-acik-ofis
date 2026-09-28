@@ -307,7 +307,7 @@ test('leaderboard helpers: nickname rules = Kodhane, server errors, view with pi
 // v2.0.1: Yazı's fixes, quotes, promo video keys, {s} from the event config
 test('v2.0.1 copy: viral/kedi texts, {s} filled from EVENTS, typographic quotes, video.* keys', () => {
   assert.equal(I.t('events.viral.text'), 'Paylaşımın viral oldu!');
-  assert.equal(I.t('events.viral.b'), 'Hemen kazanca çevir');
+  assert.equal(I.t('events.viral.b'), 'Hemen paraya çevir');   // v2.1.1
   assert.equal(I.t('events.kedi.ra'), 'Commit geri alındı, kedi başka bir klavyeye geçti.');
   const s = studio(); s.events.pending = 'viral'; const r = EV.applyChoice(s, 'a');
   assert.equal(r.buffSec, EVENTS.viral.a.buff.sec);

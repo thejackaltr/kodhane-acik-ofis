@@ -155,7 +155,7 @@
     "bad": "Buraya sığmıyor.",
     "noMoney": "Para yetmiyor.",
     "costItem": "{name}: {v}",
-    "moveItem": "{name}: yeni yerini seç (ücretsiz)"
+    "moveItem": "{name} için yeni bir yer seç. Taşımak ücretsiz."
   },
   "bubbles": {
     "work": [
@@ -293,9 +293,10 @@
       "text": "Paylaşımın viral oldu!",
       "sub": "Ekibinin paylaşımı bir gecede herkesin akışına düştü.",
       "a": "Klavye başına!",
-      "b": "Hemen kazanca çevir",
+      "b": "Hemen paraya çevir",
       "ra": "Herkes kod yazıyor: {s} sn boyunca ekip daha hızlı!",
-      "rb": "Gelen kutusu doldu."
+      "rb": "Müşteri paylaşımı görünce ödemenin bir kısmını hemen yaptı.",
+      "rbNone": "Süren bir proje yoktu, paylaşım yalnızca beğeni topladı."
     }
   },
   "welcome": {

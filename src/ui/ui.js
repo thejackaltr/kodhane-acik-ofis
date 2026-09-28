@@ -1,6 +1,6 @@
 // DOM overlay UI: HUD, bottom nav + sheets, hints, modals (event cards, welcome back, info, menu, share, cloud).
 import { h, clear, add } from './dom.js';
-import { t, tp, item, upper, available, locale } from '../logic/i18n.js';
+import { t, tp, raw, item, upper, available, locale } from '../logic/i18n.js';
 import { tl, fmt, fmtDuration } from '../logic/format.js';
 import * as E from '../logic/economy.js';
 import { STAFF, STAFF_ORDER, STAGES, FUTURE_STAGES, UPGRADES, UPGRADE_ORDER, CFG, ITEMS, ITEM_ORDER, EVENTS } from '../logic/config.js';
@@ -273,7 +273,8 @@ export class UI {
         const r = this.ctrl.chooseEvent(c);
         close();
         if (!r) return;
-        const key = 'events.' + id + '.r' + c + (r.outcome === 'win' ? 'Win' : r.outcome === 'lose' ? 'Lose' : r.pm ? 'Pm' : '');
+        let key = 'events.' + id + '.r' + c + (r.outcome === 'win' ? 'Win' : r.outcome === 'lose' ? 'Lose' : r.pm ? 'Pm' : '');
+        if (r.noProject && typeof raw(key + 'None') === 'string') key += 'None';   // v2.1.1: no running project (events.viral.rbNone)
         this.toast(t(key, { s: r.buffSec || 0 }) + (r.cash ? ' (' + (r.cash > 0 ? '+' : '−') + tl(Math.abs(r.cash)) + ')' : ''), 'ok');
       };
       add(box, h('div', { class: 'col' },
