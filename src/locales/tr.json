@@ -1,0 +1,343 @@
+{
+  "meta": {
+    "title": "Kodhane: Açık Ofis",
+    "shortName": "Açık Ofis",
+    "description": "Mahalle dairesinde bir laptop ve demlenen çayla başla; müşteri projelerini teslim et, masa koy, ekip kur, ofisini büyüt. Türkçe izometrik ofis oyunu.",
+    "loading": "Ofis açılıyor…",
+    "noscript": "Bu oyun için JavaScript gerekli."
+  },
+  "hud": {
+    "money": "Kasa",
+    "perMin": "{v}/dk",
+    "stage": "Ofis",
+    "menu": "Menü",
+    "zoomIn": "Yakınlaştır",
+    "zoomOut": "Uzaklaştır"
+  },
+  "nav": {
+    "offers": "Teklifler",
+    "team": "Ekip",
+    "office": "Ofis",
+    "share": "Paylaş"
+  },
+  "stages": {
+    "ev": "Ev Ofisi",
+    "studyo": "Butik Stüdyo",
+    "ajans": "Ajans"
+  },
+  "staff": {
+    "kurucu": {
+      "name": "Sen",
+      "desc": "Kurucu. Laptopa dokununca daha hızlı yazar."
+    },
+    "stajyer": {
+      "name": "Stajyer",
+      "desc": "Hevesli, çay demlemeyi biliyor."
+    },
+    "junior": {
+      "name": "Junior",
+      "desc": "Hızlı yazar, bazen fazla hızlı."
+    },
+    "tasarimci": {
+      "name": "Tasarımcı",
+      "desc": "Tasarım işlerini uçurur."
+    },
+    "kidemli": {
+      "name": "Kıdemli",
+      "desc": "Her hatayı daha önce görmüş."
+    },
+    "yzajan": {
+      "name": "Yapay Zekâ Ajanı",
+      "desc": "Gece gündüz yazar, çay içmez."
+    }
+  },
+  "projects": {
+    "kafe": "Kafe menüsü sitesi",
+    "berber": "Berber randevu sayfası",
+    "pastane": "Pastane sipariş formu",
+    "dernek": "Dernek bülteni",
+    "apartman": "Apartman aidat paneli",
+    "kirtasiye": "Kırtasiye stok listesi",
+    "nalbur": "Nalbur kataloğu",
+    "dugun": "Düğün davetiyesi sitesi",
+    "spor": "Semt spor kulübü logosu",
+    "pansiyon": "Pansiyon rezervasyon sayfası",
+    "balikci": "Balıkçı günün menüsü",
+    "veteriner": "Veteriner hatırlatma sayfası",
+    "kuafor": "Kuaför vitrin sitesi",
+    "firin": "Fırın ekmek saatleri",
+    "oto": "Oto yıkama kampanya sayfası"
+  },
+  "tutorial": {
+    "laptop": "Laptop açık, çay demde. İlk müşteri kapıda.",
+    "basla": "Kafe menüsü için site istiyorlar. Başla!",
+    "stajyer": "Yalnız yetişmiyor. Bir stajyer al?",
+    "masa": "Ona bir masa lazım, boş bir yere dokun.",
+    "teklif": "Yeni teklif geldi, Teklifler'e bak."
+  },
+  "offers": {
+    "title": "Teklifler",
+    "empty": "Şimdilik teklif yok. Müşteriler yolda.",
+    "accept": "Kabul et",
+    "decline": "Geç",
+    "work": "{kod} kod",
+    "workDesign": "{kod} kod · {tasarim} tasarım",
+    "pay": "{pay}",
+    "full": "Aynı anda en fazla {n} proje. Ekip büyüdükçe artar.",
+    "active": "Devam eden",
+    "noStaff": "Ekip boşalınca başlar",
+    "eta": "~{t}",
+    "auto": "Proje panosu açık: ekip boşta kalınca teklifleri kendisi alıyor."
+  },
+  "team": {
+    "title": "Ekip",
+    "hire": "İşe al",
+    "hireWithDesk": "İşe al + masa",
+    "locked": "Kilitli",
+    "unlockAt": "Toplam {v} kazanınca açılır",
+    "unlockStage": "{stage} aşamasında açılır",
+    "count": "{n} kişi",
+    "rate": "{kod} kod/sn · {tasarim} tasarım/sn",
+    "needMoney": "Para yetmiyor",
+    "busy": "Projede: {p}",
+    "idle": "Boşta",
+    "assign": "Projeye ata",
+    "unassign": "Boşa al",
+    "you": "Laptopa dokun, daha hızlı yaz."
+  },
+  "office": {
+    "title": "Ofis",
+    "desk": "Masa koy",
+    "deskDesc": "Yeni biri için yer açar.",
+    "upgrades": "Geliştirmeler",
+    "bought": "Alındı",
+    "move": "Taşın: {stage}",
+    "moveDesc": "Daha büyük bir yer, yeni görünüm, projeler %50 daha kazançlı.",
+    "moveLocked": "Toplam {v} kazanınca taşınabilirsin",
+    "future": "{stage}: yakında",
+    "noSpace": "Bu katta yer kalmadı. Taşınma zamanı!"
+  },
+  "upgrades": {
+    "demlik": {
+      "name": "Demlik çay",
+      "desc": "Ekip %10 daha hızlı."
+    },
+    "pano": {
+      "name": "Proje panosu",
+      "desc": "Ekip boşta kalınca teklifleri kendisi alır."
+    },
+    "klavye": {
+      "name": "Mekanik klavye",
+      "desc": "Laptop dokunuşu 2 kat, ekip %15 hızlı."
+    },
+    "sandalye": {
+      "name": "Ergonomik sandalye",
+      "desc": "Ekip %25 daha hızlı."
+    }
+  },
+  "place": {
+    "cost": "Masa: {v}",
+    "costHire": "Masa + {name}: {v}",
+    "cancel": "Vazgeç",
+    "bad": "Buraya sığmıyor.",
+    "noMoney": "Para yetmiyor."
+  },
+  "bubbles": {
+    "work": [
+      "Bu bende.",
+      "Localhost'ta çalışıyordu.",
+      "Derleniyor…",
+      "Neredeyse bitti.",
+      "Kim dokundu buna?",
+      "Önbelleği temizle.",
+      "Bir çay daha.",
+      "Bende çalışıyor.",
+      "Sadece küçük bir düzeltme."
+    ],
+    "design": [
+      "Biraz daha beyaz alan.",
+      "Font seçiyorum.",
+      "Logo büyüdü mü?",
+      "Renkler konuşuyor."
+    ],
+    "robot": [
+      "Hesaplanıyor.",
+      "Çay tanımsız.",
+      "Görev alındı."
+    ],
+    "idle": [
+      "Boştayım.",
+      "İş var mı?",
+      "Çay molası."
+    ],
+    "hired": "Bu bende!",
+    "cat": [
+      "Miyav.",
+      "Mırr.",
+      "Miyav?"
+    ],
+    "catKeyboard": "Kedi deploy etti.",
+    "delivered": [
+      "Teslim!",
+      "Müşteri mutlu.",
+      "Fatura kesildi."
+    ]
+  },
+  "toast": {
+    "delivered": "{p} teslim edildi: +{v}",
+    "hired": "{name} aramıza katıldı.",
+    "desk": "Masa yerleşti.",
+    "upgrade": "{name} alındı.",
+    "moved": "Yeni ofis: {stage}!",
+    "saved": "Kaydedildi.",
+    "offerNew": "Yeni teklif: {p}",
+    "full": "Önce devam eden işler bitsin.",
+    "noMoney": "Para yetmiyor.",
+    "catPet": "Kedi sevildi."
+  },
+  "events": {
+    "title": "Olay",
+    "later": "Sonra",
+    "logo": {
+      "text": "Müşteri: Logoyu biraz daha büyütebilir miyiz?",
+      "a": "Büyütelim (iş uzar, ücret artar)",
+      "b": "Bu hali çok dengeli",
+      "ra": "Logo artık ekrana sığmıyor ama müşteri mutlu.",
+      "rb": "Ekip gururlu, biraz hızlandı."
+    },
+    "cuma": {
+      "text": "Cuma akşamı. Birisi \"deploy edelim\" dedi.",
+      "a": "Deploy edelim",
+      "b": "Pazartesi bakarız",
+      "ra": "Ödeme geldi, hafta sonu hotfix yazıldı.",
+      "rb": "Herkes huzurla eve gitti."
+    },
+    "yegen": {
+      "text": "Müşteri: Yeğenim de biraz web'den anlıyor.",
+      "a": "Birlikte çalışalım",
+      "b": "Nazikçe reddet",
+      "ra": "Yeğen üç renk daha ekledi. Ücret de arttı.",
+      "rb": "Müşteri anlayışla karşıladı, yeğen biraz kırıldı."
+    },
+    "cay": {
+      "text": "Çaycı zam yaptı.",
+      "a": "Öde, çay şart",
+      "b": "Filtre kahveye geçelim",
+      "ra": "Çaylar tazelendi, klavyeler hızlandı.",
+      "rb": "Ofiste sessiz bir yas havası var."
+    },
+    "acil": {
+      "text": "Müşteri: Bu iş biraz acil.",
+      "a": "Gece mesaisi",
+      "b": "Yarın bakarız",
+      "ra": "Sabaha karşı büyük ilerleme. Ekip biraz yorgun.",
+      "rb": "Müşteri bekleyebileceğini söyledi."
+    }
+  },
+  "welcome": {
+    "title": "Tekrar hoş geldin",
+    "lines": [
+      "Sen yokken ekip {p} proje teslim etti, kedi {k} kez klavyeye yattı.",
+      "Sen yokken {p} proje bitti, çay en az üç kez demlendi.",
+      "Sen yokken {p} müşteri mutlu ayrıldı, kedi {k} kez klavyede uyudu.",
+      "Sen yokken ekip {p} işi teslim etti ve kimse \"bende çalışıyordu\" demedi."
+    ],
+    "quiet": "Sen yokken ofis sessizdi, kedi {k} kez klavyeye yattı.",
+    "earned": "Kasaya giren: +{v}",
+    "cap": "En fazla {h} saatlik kazanç sayılır.",
+    "ok": "Harika"
+  },
+  "share": {
+    "button": "Ofisimi paylaş",
+    "title": "Ofisimi paylaş",
+    "native": "Paylaş",
+    "download": "Resmi indir",
+    "copy": "Bağlantıyı kopyala",
+    "copied": "Bağlantı kopyalandı.",
+    "downloaded": "Resim indirildi.",
+    "text": "{stage} ofisim büyüyor: {n} kişilik ekip, {p} proje. Sen de kur:",
+    "caption": "{n} kişilik ekip · {p} proje teslim",
+    "close": "Kapat",
+    "fail": "Paylaşılamadı; resmi indirip bağlantıyı kopyalayabilirsin."
+  },
+  "cloud": {
+    "menu": "Bulut kaydı",
+    "askTitle": "İlerlemeni buluta kaydet",
+    "askText": "Ofisin büyüyor. Kaybolmasın mı? E-postanı yaz, kodu gönderelim.",
+    "later": "Şimdi değil",
+    "emailLabel": "E-posta adresin",
+    "emailPh": "ornek@eposta.com",
+    "send": "Kodu gönder",
+    "sending": "Gönderiliyor…",
+    "sent": "E-postana giriş kodu gönderdik.",
+    "codeLabel": "6 haneli kod",
+    "verify": "Giriş yap",
+    "verifying": "Kontrol ediliyor…",
+    "resend": "Kodu tekrar gönder",
+    "resendIn": "Kodu tekrar gönder ({s} sn)",
+    "changeEmail": "Başka adres",
+    "spam": "Gelmezse gereksiz klasörüne bak.",
+    "signedIn": "{email} ile giriş yaptın.",
+    "syncing": "Buluta kaydediliyor…",
+    "synced": "Buluta kaydedildi · {t}",
+    "ready": "Bulut kaydı hazır",
+    "syncNow": "Şimdi kaydet",
+    "signOut": "Çıkış yap",
+    "signedOut": "Çıkış yapıldı, kaydın bu cihazda duruyor.",
+    "loggedInToast": "Giriş yapıldı, ofisin artık bulutta.",
+    "cloudLoaded": "Buluttaki ofisin yüklendi.",
+    "backupNote": "Bu cihazdaki eski kayıt yedeklendi.",
+    "badEmail": "Geçerli bir e-posta adresi yaz.",
+    "badCode": "Kod 6 haneli olmalı, yalnızca rakam.",
+    "wrongCode": "Kod hatalı ya da süresi dolmuş, yeni kod iste.",
+    "offline": "İnternet yok, oyun bu cihazda kaydediliyor.",
+    "unreachable": "Buluta şu an ulaşılamıyor, oyun bu cihazda kaydediliyor.",
+    "rateLimit": "Çok fazla deneme oldu, birkaç dakika sonra tekrar dene.",
+    "sendFail": "Kod gönderilemedi, adresi kontrol edip tekrar dene.",
+    "guestNote": "Giriş yapmadan da oynayabilirsin; kayıt bu cihazda tutulur.",
+    "sameAccount": "Kodhane hesabınla aynı hesap."
+  },
+  "menu": {
+    "title": "Menü",
+    "cloud": "Bulut kaydı",
+    "credits": "Hakkında",
+    "reset": "Baştan başla",
+    "resetConfirm": "Emin misin? Ofis, ekip ve kasa sıfırlanır.",
+    "resetYes": "Evet, baştan başla",
+    "close": "Kapat",
+    "install": "Uygulama olarak yükle",
+    "installIos": "iPhone'da: Paylaş ▸ Ana Ekrana Ekle",
+    "stats": "{p} proje · {k} kedi uykusu · toplam {v}",
+    "language": "Dil"
+  },
+  "credits": {
+    "title": "Hakkında",
+    "made": "Teserix yapımı",
+    "link": "teserix.com",
+    "art": "Tüm çizimler oyun için kodla üretildi (CC0).",
+    "engine": "Phaser 3 (MIT) ile yapıldı.",
+    "fiction": "Tüm müşteriler, mekânlar ve kişiler hayal ürünüdür."
+  },
+  "update": {
+    "ready": "Yeni sürüm hazır.",
+    "reload": "Yenile"
+  },
+  "info": {
+    "close": "Tamam",
+    "desk": "Masa",
+    "deskFree": "Boş masa, birini işe al.",
+    "cat": "Ofis Kedisi",
+    "catDesc": "Klavyelere yatar, sevilmeyi sever."
+  },
+  "fmt": {
+    "money": "{v} TL",
+    "hours": "{n} sa",
+    "minutes": "{n} dk",
+    "seconds": "{n} sn",
+    "pair": "{a} {b}"
+  },
+  "languages": {
+    "tr": "Türkçe",
+    "en": "English"
+  }
+}

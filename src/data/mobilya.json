@@ -1,0 +1,228 @@
+{
+ "masa_tekli_laptop_01": {
+  "boyut": [
+   2,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   128
+  ],
+  "koltuk": [
+   0,
+   -1
+  ],
+  "ayrilmis": [
+   [
+    0,
+    -1
+   ],
+   [
+    1,
+    -1
+   ]
+  ],
+  "oturmaPx": [
+   64,
+   -6
+  ]
+ },
+ "masa_tekli_monitor_01": {
+  "boyut": [
+   2,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   142
+  ],
+  "koltuk": [
+   0,
+   -1
+  ],
+  "ayrilmis": [
+   [
+    0,
+    -1
+   ],
+   [
+    1,
+    -1
+   ]
+  ],
+  "oturmaPx": [
+   64,
+   -6
+  ]
+ },
+ "masa_kurucu_01": {
+  "boyut": [
+   2,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   128
+  ],
+  "koltuk": [
+   0,
+   -1
+  ],
+  "ayrilmis": [
+   [
+    0,
+    -1
+   ],
+   [
+    1,
+    -1
+   ]
+  ],
+  "oturmaPx": [
+   64,
+   -6
+  ]
+ },
+ "masa_mutfak_01": {
+  "boyut": [
+   2,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   128
+  ],
+  "koltuk": [
+   0,
+   -1
+  ],
+  "ayrilmis": [
+   [
+    0,
+    -1
+   ],
+   [
+    1,
+    -1
+   ]
+  ],
+  "oturmaPx": [
+   64,
+   -6
+  ]
+ },
+ "esya_cayocagi_01": {
+  "boyut": [
+   1,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   142
+  ]
+ },
+ "esya_kanepe_01": {
+  "boyut": [
+   2,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   102
+  ]
+ },
+ "esya_bitki_01": {
+  "boyut": [
+   1,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   128
+  ]
+ },
+ "esya_kitaplik_01": {
+  "boyut": [
+   1,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   182
+  ]
+ },
+ "esya_sebil_01": {
+  "boyut": [
+   1,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   182
+  ]
+ },
+ "esya_tahta_01": {
+  "boyut": [
+   2,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   182
+  ]
+ },
+ "esya_puf_01": {
+  "boyut": [
+   1,
+   1
+  ],
+  "pivotKaro": [
+   0,
+   0
+  ],
+  "pivotPx": [
+   64,
+   92
+  ]
+ }
+}

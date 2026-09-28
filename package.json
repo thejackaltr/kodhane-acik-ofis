@@ -1,0 +1,24 @@
+{
+  "name": "kodhane-acik-ofis",
+  "version": "1.0.0",
+  "description": "Kodhane: Açık Ofis — izometrik ofis tycoon (Phaser 3 + Vite)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "test": "node --test tests/unit/",
+    "atlas": "node tools/atlas/build.mjs",
+    "smoke": "node tests/smoke/smoke.mjs",
+    "balance": "node tools/balance.mjs 60"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0",
+    "vite": "^8.3.1"
+  },
+  "private": true,
+  "type": "module"
+}
