@@ -15,6 +15,7 @@ import { CloudClient, CloudSync, RPC } from '../../src/cloud/cloud.js';
 import { HoldGesture, HOLD_MS } from '../../src/ui/hold.js';
 import { TabGate, WRITER_KEY } from '../../src/cloud/tabGate.js';
 import { ajansSave } from '../smoke/grown.mjs';
+import { resetBodyKey } from '../../src/ui/ui.js';
 
 const T0 = Date.UTC(2026, 8, 28, 13, 0, 0);
 const tr = JSON.parse(fs.readFileSync(new URL('../../src/locales/tr.json', import.meta.url)));
@@ -380,7 +381,8 @@ test('confirm dialog copy: Yazı\'s fixed lists (no achievements in Açık Ofis)
   assert.equal(I.t('reset.restoreAsk', { t: '28 Eyl 2026 16:02' }), '28 Eyl 2026 16:02 tarihli bir yedeğin var. Geri yüklersen şimdiki ilerlemen silinir.');
   for (const k of ['title', 'body', 'lostTitle', 'keptTitle', 'hold', 'countdown', 'cancel', 'done', 'undo', 'restored', 'restoreYes', 'otherDevice', 'otherDeviceSync', 'undoExpired', 'failed'])
     assert.equal(typeof I.raw('reset.' + k), 'string', k);
-  for (const k of ['holdHint', 'deleteTitle', 'keepTitle', 'del', 'keep', '_gecici']) assert.equal(I.raw('reset.' + k), undefined, 'placeholder/marker removed: ' + k);
+  for (const k of ['holdHint', 'deleteTitle', 'keepTitle', 'del', 'keep']) assert.equal(I.raw('reset.' + k), undefined, 'placeholder removed: ' + k);
+  assert.match(I.raw('reset._gecici'), /reset\.bodyGuest/, 'temporary marker names only reset.bodyGuest (remove when Yazı approves)');
   assert.deepEqual([I.t('reset.undoExpired'), I.t('reset.failed'), I.t('reset.otherDeviceSync'), I.t('reset.restoreRow'), I.t('reset.restoreFailed')], [
     'Geri alma süresi doldu.', 'Ofis şu an sıfırlanamadı. Bağlantını kontrol edip tekrar dene.',
     'Oyuna başka bir cihazda ya da sekmede devam ettin. Güncel kayıt yüklendi.', 'Son yedeği geri yükle',
@@ -388,6 +390,18 @@ test('confirm dialog copy: Yazı\'s fixed lists (no achievements in Açık Ofis)
   const ui = fs.readFileSync(new URL('../../src/ui/ui.js', import.meta.url), 'utf8');
   assert.equal(ui.includes("'reset.countdown'"), false, 'countdown is not rendered');
   assert.equal(new CloudClient({}).cfg.backupRetentionDays, 30);
+});
+test('confirm dialog body: guests get a local-only body (no cloud/backup words), signed-in keeps the cloud-aware body', () => {
+  const CLOUD = /bulut|yedek|hesap|senkron|eşitle|sunucu|geri yükle/i;
+  assert.equal(resetBodyKey(false), 'reset.bodyGuest'); assert.equal(resetBodyKey(undefined), 'reset.bodyGuest');
+  assert.equal(resetBodyKey(true), 'reset.body');
+  const guest = I.t(resetBodyKey(false)), signed = I.t(resetBodyKey(true));
+  assert.equal(guest, 'Ofisin sıfırdan başlar. Bu cihazdaki kaydın silinir.');
+  assert.doesNotMatch(guest, CLOUD, 'guest body: ' + guest);
+  assert.equal(signed, 'Ofisin sıfırdan başlar. Bu cihazdaki ve buluttaki kaydın değişir.', 'signed-in body unchanged (Yazı)');
+  assert.match(signed, /bulut/);
+  const ui = fs.readFileSync(new URL('../../src/ui/ui.js', import.meta.url), 'utf8');
+  assert.equal(ui.includes("t('reset.body')"), false, 'dialog body goes through resetBodyKey');
 });
 test('otherDevice split: a later game start (reset) vs the same game played elsewhere (sync)', () => {
   const mine = { startedAt: T0 };
