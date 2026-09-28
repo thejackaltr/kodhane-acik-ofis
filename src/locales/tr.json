@@ -12,7 +12,8 @@
     "stage": "Ofis",
     "menu": "Menü",
     "zoomIn": "Yakınlaştır",
-    "zoomOut": "Uzaklaştır"
+    "zoomOut": "Uzaklaştır",
+    "zoomFit": "Tüm ofisi göster"
   },
   "nav": {
     "offers": "Teklifler",
@@ -153,7 +154,8 @@
     "cancel": "Vazgeç",
     "bad": "Buraya sığmıyor.",
     "noMoney": "Para yetmiyor.",
-    "costItem": "{name}: {v}"
+    "costItem": "{name}: {v}",
+    "moveItem": "{name}: yeni yerini seç (ücretsiz)"
   },
   "bubbles": {
     "work": [
@@ -211,7 +213,8 @@
     "offerNew": "Yeni teklif: {p}",
     "full": "Önce devam eden işler bitsin.",
     "noMoney": "Para yetmiyor.",
-    "catPet": "Kedi sevildi."
+    "catPet": "Kedi sevildi.",
+    "itemMoved": "{name} taşındı."
   },
   "events": {
     "title": "Olay",
@@ -420,7 +423,8 @@
       "desc": "Vınlıyor, ısınıyor, bir şeyler çalıştırıyor.",
       "effect": "Çevresindeki masaların teslim ettiği projeler %{n} daha kazançlı."
     },
-    "area": "Parlayan kareler bonus alır."
+    "area": "Parlayan kareler bonus alır.",
+    "move": "Taşı"
   },
   "stageUp": {
     "studyo": "Kapıda adınız yazıyor. Müşteri artık “ekibiniz kaç kişi?” diye sormaya çekinmiyor.",

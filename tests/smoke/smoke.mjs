@@ -396,6 +396,10 @@ for (const vp of [{ name: 'mobile', viewport: { width: 390, height: 844 }, devic
   check('stageup: share button opens the share card', !!(await p.$('[data-test=share-img]')));
   const mv = await p.evaluate(() => { const s = window.__acikOfis.ctrl.state; return { stage: s.stage, staff: s.staff.length, zoom: window.__acikOfis.scene.fitZoom }; });
   check('stageup: now in the Ajans with the whole team', mv.stage === 2 && mv.staff === save.staff.length + 1, JSON.stringify(mv));
+  await p.evaluate(() => { const b = document.querySelector('.modal .btn.ghost, .modal [data-test=share-close]'); if (b) b.click(); });
+  await p.waitForTimeout(400);
+  const fitAfter = await p.evaluate(() => { const sc = window.__acikOfis.scene, b = sc.bounds, a = sc.worldToCss(b.L, b.T), c = sc.worldToCss(b.R, b.B); return { ok: a.x >= -1 && a.y >= -1 && c.x <= innerWidth + 1 && c.y <= innerHeight + 1, zoom: sc.userZoom, fit: sc.fitZoom }; });
+  check('v21 stage change: the bigger Ajans room fits on screen right after the move', fitAfter.ok && Math.abs(fitAfter.zoom - fitAfter.fit) < 1e-6, JSON.stringify(fitAfter));
   check('pm/stageup: no console errors', errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
@@ -442,6 +446,128 @@ for (const vp of [{ name: 'mobile', viewport: { width: 390, height: 844 }, devic
   const gc = g.fake.lbCalls.at(-1);
   check('lb guest: public list + sign-in prompt, no user token', !!(await q.$('[data-test=lb-signin]')) && gc && !/Bearer fake/.test(gc.auth) && gc.body.p_game === 'acik_ofis', gc && JSON.stringify({ body: gc.body, userToken: /Bearer fake/.test(gc.auth) }));
   await g.close();
+}
+
+
+// ================================================================ v2.1: mobile view (fit / pinch / pan / taps vs drags) + free item moving
+const officeOnScreen = (p) => p.evaluate(() => {
+  const sc = window.__acikOfis.scene, b = sc.bounds, a = sc.worldToCss(b.L, b.T), c = sc.worldToCss(b.R, b.B);
+  const ok = a.x >= -1 && a.y >= -1 && c.x <= innerWidth + 1 && c.y <= innerHeight + 1;
+  return { ok, zoom: +sc.userZoom.toFixed(3), fit: +sc.fitZoom.toFixed(3), box: [a.x, a.y, c.x, c.y].map(Math.round), vw: innerWidth, vh: innerHeight };
+});
+const closeModal = async (p) => { await p.keyboard.press('Escape'); await p.waitForFunction(() => !document.querySelector('.modal .info-head'), null, { timeout: 3000 }).catch(() => {}); };
+const onScreenStaff = (p) => p.evaluate(() => {
+  const sc = window.__acikOfis.scene, s = window.__acikOfis.ctrl.state;
+  for (const x of s.staff) { if (x.type === 'kurucu') continue; const o = sc.staffSprites.get(x.id); if (!o) continue; const q = sc.worldToCss(o.x, o.y - 22); if (q.x > 40 && q.x < innerWidth - 40 && q.y > 170 && q.y < innerHeight - 200) return { ...q, id: x.id }; }
+  return null;
+});
+for (const vp of [{ name: '390', viewport: { width: 390, height: 844 } }, { name: '360', viewport: { width: 360, height: 780 } }]) {
+  const ctx = await browser.newContext({ ...vp, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'tr-TR' });
+  const save = ajansSave(Date.now());
+  await ctx.addInitScript((s) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('acik_ofis_save_v1', JSON.stringify(s)); sessionStorage.setItem('seeded', '1'); } }, save);
+  const p = await ctx.newPage();
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  await p.goto(base); await ready(p); await p.waitForTimeout(900);
+  const v = 'v21 ' + vp.name;
+  let o = await officeOnScreen(p);
+  check(v + ': whole Ajans office fits on screen at start', o.ok && o.zoom === o.fit, JSON.stringify(o));
+  await p.screenshot({ path: path.join(shots, 'v21-fit-' + vp.name + '-mobile.png') });
+  check(v + ': fit button visible on touch (+/- hidden)', await p.isVisible('[data-test=zoom-fit]') && !(await p.isVisible('.zoom .zin')));
+  // rotate to landscape and back: refits while the player has not zoomed
+  await p.setViewportSize({ width: vp.viewport.height, height: vp.viewport.width }); await p.waitForTimeout(700);
+  o = await officeOnScreen(p);
+  check(v + ': refits after rotation (landscape)', o.ok && o.zoom === o.fit, JSON.stringify(o));
+  if (vp.name === '390') await p.screenshot({ path: path.join(shots, 'v21-landscape-mobile.png') });
+  await p.setViewportSize(vp.viewport); await p.waitForTimeout(700);
+  o = await officeOnScreen(p);
+  check(v + ': refits after rotating back', o.ok && o.zoom === o.fit, JSON.stringify(o));
+  // pinch zoom in around the middle
+  const cdp = await ctx.newCDPSession(p);
+  const cx = vp.viewport.width / 2, cy = vp.viewport.height / 2;
+  const tp = (pts) => pts.map(([x, y], i) => ({ x, y, id: i }));
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: tp([[cx - 30, cy], [cx + 30, cy]]) });
+  for (let i = 1; i <= 8; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: tp([[cx - 30 - i * 14, cy], [cx + 30 + i * 14, cy]]) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await p.waitForTimeout(400);
+  const z1 = await p.evaluate(() => window.__acikOfis.scene.userZoom);
+  check(v + ': pinch zooms in', z1 > o.fit * 1.5, z1.toFixed(2) + ' vs fit ' + o.fit);
+  check(v + ': pinch did not open anything', !(await p.$('.modal .info-head')));
+  if (vp.name === '390') await p.screenshot({ path: path.join(shots, 'v21-pinch-mobile.png') });
+  // a tap on someone after zooming opens the info card
+  let who = await onScreenStaff(p);
+  await p.touchscreen.tap(who.x, who.y); await p.waitForTimeout(400);
+  check(v + ': tap on an employee after pinch opens the info card', !!(await p.$('.modal .info-head')), JSON.stringify(who));
+  await closeModal(p); await p.waitForTimeout(300);
+  // a drag that starts on an employee pans and opens nothing
+  who = await onScreenStaff(p);
+  const s0 = await p.evaluate(() => ({ x: window.__acikOfis.scene.cameras.main.scrollX, y: window.__acikOfis.scene.cameras.main.scrollY }));
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: who.x, y: who.y, id: 0 }] });
+  for (let i = 1; i <= 8; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: who.x - i * 9, y: who.y - i * 4, id: 0 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await p.waitForTimeout(700);
+  const s1 = await p.evaluate(() => ({ x: window.__acikOfis.scene.cameras.main.scrollX, y: window.__acikOfis.scene.cameras.main.scrollY }));
+  check(v + ': drag starting on an employee pans, no info card', (s1.x !== s0.x || s1.y !== s0.y) && !(await p.$('.modal .info-head')), JSON.stringify([s0, s1]));
+  // the player zoomed: a resize keeps their zoom; the fit button brings the whole office back
+  await p.setViewportSize({ width: vp.viewport.width, height: vp.viewport.height - 60 }); await p.waitForTimeout(500);
+  const z2 = await p.evaluate(() => window.__acikOfis.scene.userZoom);
+  check(v + ': resize after zooming keeps the player zoom', Math.abs(z2 - z1) < 0.01, z1 + ' -> ' + z2);
+  await p.setViewportSize(vp.viewport); await p.waitForTimeout(400);
+  await p.tap('[data-test=zoom-fit]'); await p.waitForTimeout(400);
+  o = await officeOnScreen(p);
+  check(v + ': fit button shows the whole office again', o.ok && o.zoom === o.fit, JSON.stringify(o));
+  if (vp.name === '390') {
+    // free item moving: tap the rack -> Taşı -> preview tap -> confirm tap
+    const money0 = await p.evaluate(() => window.__acikOfis.ctrl.state.money);
+    const rack = await p.evaluate(() => { const sc = window.__acikOfis.scene, s = window.__acikOfis.ctrl.state; const it = s.items.find((x) => x.type === 'sunucu'); const o = sc.itemSprites.get(it.id); return { ...sc.worldToCss(o.x, o.y - 12), id: it.id, gx: it.gx, gy: it.gy }; });
+    await p.touchscreen.tap(rack.x, rack.y); await p.waitForTimeout(400);
+    check('v21 move: tapping an item shows the Taşı button', await p.isVisible('[data-test=item-move]'));
+    await p.tap('[data-test=item-move]'); await p.waitForTimeout(500);
+    const bar = await p.textContent('.placebar');
+    const lay = await p.evaluate(() => { const a = document.querySelector('.placebar').getBoundingClientRect(), h = document.querySelector('[data-test=hint]').getBoundingClientRect(), b = document.querySelector('[data-test=place-cancel]').getBoundingClientRect(); return { overlap: h.bottom > a.top + 1, cancelOneLine: b.height < 48 }; });
+    check('v21 move: hint does not cover the placement bar, Vazgeç on one line', !lay.overlap && lay.cancelOneLine, JSON.stringify(lay));
+    check('v21 move: placement bar says free', bar.includes(TR.items.sunucu.name) && bar.includes('ücretsiz'), bar);
+    const spot = await hlSpot(p, 25);
+    await p.touchscreen.tap(spot.x, spot.y); await p.waitForTimeout(400);
+    const mid = await p.evaluate((id) => window.__acikOfis.ctrl.state.items.find((x) => x.id === id), rack.id);
+    check('v21 move: first tap only previews', mid.gx === rack.gx && mid.gy === rack.gy);
+    await p.screenshot({ path: path.join(shots, 'v21-item-move-mobile.png') });
+    await p.touchscreen.tap(spot.x, spot.y); await p.waitForTimeout(600);
+    const after = await p.evaluate((id) => ({ it: window.__acikOfis.ctrl.state.items.find((x) => x.id === id), money: window.__acikOfis.ctrl.state.money, n: window.__acikOfis.ctrl.state.items.length, placing: !!window.__acikOfis.ctrl.placing }), rack.id);
+    check('v21 move: second tap moves the rack, free, nothing sold', (after.it.gx !== rack.gx || after.it.gy !== rack.gy) && after.money >= money0 && after.n === save.items.length && !after.placing, JSON.stringify(after));
+    check('v21 move: toast', (await p.textContent('.toasts')).includes(TR.toast.itemMoved.replace('{name}', TR.items.sunucu.name)));
+    await p.evaluate(() => window.__acikOfis.ctrl.save());
+    await p.reload(); await ready(p);
+    const kept = await p.evaluate((id) => window.__acikOfis.ctrl.state.items.find((x) => x.id === id), rack.id);
+    check('v21 move: new position survives a reload', kept.gx === after.it.gx && kept.gy === after.it.gy);
+  }
+  check(v + ': no console errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+{
+  // desktop: fit, wheel zoom, fit button, move an item with the mouse (hover + click)
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, locale: 'tr-TR' });
+  await ctx.addInitScript((s) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('acik_ofis_save_v1', JSON.stringify(s)); sessionStorage.setItem('seeded', '1'); } }, ajansSave(Date.now()));
+  const p = await ctx.newPage();
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  await p.goto(base); await ready(p); await p.waitForTimeout(700);
+  let o = await officeOnScreen(p);
+  check('v21 desktop: whole office fits', o.ok && o.zoom === o.fit, JSON.stringify(o));
+  await p.mouse.move(640, 420); await p.mouse.wheel(0, -400); await p.waitForTimeout(300);
+  check('v21 desktop: wheel zoom', (await p.evaluate(() => window.__acikOfis.scene.userZoom)) > o.fit);
+  await p.click('[data-test=zoom-fit]'); await p.waitForTimeout(300);
+  o = await officeOnScreen(p);
+  check('v21 desktop: fit button', o.ok && o.zoom === o.fit, JSON.stringify(o));
+  const kahve = await p.evaluate(() => { const sc = window.__acikOfis.scene, s = window.__acikOfis.ctrl.state; const it = s.items.find((x) => x.type === 'kahve'); const o = sc.itemSprites.get(it.id); return { ...sc.worldToCss(o.x, o.y - 10), id: it.id, gx: it.gx, gy: it.gy }; });
+  await p.mouse.click(kahve.x, kahve.y); await p.waitForTimeout(400);
+  await p.click('[data-test=item-move]'); await p.waitForTimeout(400);
+  const spot = await hlSpot(p, 12);
+  await p.mouse.move(spot.x, spot.y); await p.waitForTimeout(250);
+  await p.mouse.click(spot.x, spot.y); await p.waitForTimeout(500);
+  const it = await p.evaluate((id) => window.__acikOfis.ctrl.state.items.find((x) => x.id === id), kahve.id);
+  check('v21 desktop: item moved with hover + one click', it.gx !== kahve.gx || it.gy !== kahve.gy, JSON.stringify([kahve, it]));
+  await p.screenshot({ path: path.join(shots, 'v21-desktop.png') });
+  check('v21 desktop: no console errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
 }
 
 

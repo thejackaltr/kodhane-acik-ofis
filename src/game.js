@@ -166,13 +166,24 @@ export class Controller {
     this.emit('placing', this.placing); this.emit('tutorial');
     return { ok: true };
   }
+  // v2.1: move a placed item (free); same placement flow as buying (touch: preview tap + confirm tap)
+  startMoveItem(itemId) {
+    const it = (this.state.items || []).find((x) => x.id === itemId);
+    if (!it || !ITEMS[it.type]) return { ok: false, reason: 'yok' };
+    this.placing = { kind: ITEMS[it.type].kind, hireType: null, item: it.type, moveId: it.id };
+    this.emit('placing', this.placing); this.emit('tutorial');
+    return { ok: true };
+  }
   cancelPlacing() { this.placing = null; this.emit('placing', null); this.emit('tutorial'); }
   placeAt(gx, gy) {
     const p = this.placing; if (!p) return { ok: false };
     const s = this.state;
     if (!G.canPlace(s, p.kind, gx, gy)) return { ok: false, reason: 'yer' };
     let r;
-    if (p.item) {
+    if (p.moveId != null) {
+      r = E.moveItem(s, p.moveId, gx, gy);
+      if (r.ok) { this.placing = null; this.emit('placing', null); this.emit('itemMoved', r.item); this.changed(); this.save(); }
+    } else if (p.item) {
       r = E.buyItem(s, p.item, gx, gy);
       if (r.ok) { this.placing = null; this.emit('placing', null); this.emit('itemPlaced', r.item); this.changed(); this.save(); }
     } else if (p.hireType) {

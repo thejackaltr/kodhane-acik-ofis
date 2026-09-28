@@ -29,6 +29,7 @@ export class UI {
     ctrl.on('delivered', (d) => this.toast(t('toast.delivered', { p: t('projects.' + d.key), v: tl(d.pay) }), 'ok'));
     ctrl.on('hired', (r) => { this.toast(t('toast.hired', { name: t('staff.' + r.staff.type + '.name') })); this.closeSheet(); });
     ctrl.on('placing', (p) => this.renderPlaceBar(p));
+    ctrl.on('itemMoved', (it) => this.toast(t('toast.itemMoved', { name: t('items.' + it.type + '.name') }), 'ok'));
     ctrl.on('event', (id) => this.showEvent(id));
     ctrl.on('welcome', (w) => this.showWelcome(w));
     ctrl.on('askCloud', () => this.opts.cloud && this.queueModal(this.opts.cloud.renderAsk(this), { dismissable: true, cls: 'cloud' }));
@@ -64,8 +65,9 @@ export class UI {
     this.modalEl = h('div', { class: 'modal-wrap hidden', onclick: (e) => { if (e.target === this.modalEl && this.modalOpen && this.modalOpen.dismissable) this.closeModal(); } });
     this.toastEl = h('div', { class: 'toasts', 'aria-live': 'polite' });
     this.zoomEl = h('div', { class: 'zoom' },
-      h('button', { class: 'icon-btn', 'aria-label': t('hud.zoomIn'), onclick: () => this.opts.zoom && this.opts.zoom(1.2) }, '+'),
-      h('button', { class: 'icon-btn', 'aria-label': t('hud.zoomOut'), onclick: () => this.opts.zoom && this.opts.zoom(1 / 1.2) }, '−'));
+      h('button', { class: 'icon-btn zin', 'aria-label': t('hud.zoomIn'), onclick: () => this.opts.zoom && this.opts.zoom(1.2) }, '+'),
+      h('button', { class: 'icon-btn zout', 'aria-label': t('hud.zoomOut'), onclick: () => this.opts.zoom && this.opts.zoom(1 / 1.2) }, '−'),
+      h('button', { class: 'icon-btn zfit', 'aria-label': t('hud.zoomFit'), title: t('hud.zoomFit'), 'data-test': 'zoom-fit', onclick: () => this.opts.fit && this.opts.fit() }, '⤢'));
     add(r, this.hud, this.projEl, this.hintEl, this.zoomEl, this.sheetEl, this.placeBar, this.nav, this.modalEl, this.toastEl);
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
@@ -233,7 +235,8 @@ export class UI {
     if (!p) return;
     const s = this.ctrl.state;
     let label;
-    if (p.item) label = t('place.costItem', { name: t('items.' + p.item + '.name'), v: tl(E.itemCost(s, p.item)) });
+    if (p.moveId != null) label = t('place.moveItem', { name: t('items.' + p.item + '.name') });
+    else if (p.item) label = t('place.costItem', { name: t('items.' + p.item + '.name'), v: tl(E.itemCost(s, p.item)) });
     else {
       const cost = E.deskCost(s) + (p.hireType ? E.staffCost(s, p.hireType) : 0);
       label = p.hireType ? t('place.costHire', { name: t('staff.' + p.hireType + '.name'), v: tl(cost) }) : t('place.cost', { v: tl(cost) });
@@ -307,7 +310,9 @@ export class UI {
     if (hit.kind === 'item') {
       const it = (s.items || []).find((x) => x.id === hit.id); if (!it) return;
       return this.showModal((box, close) => add(box, h('div', { class: 'info-head' }, h('div', { class: 'item-ic ic-' + it.type, text: ITEM_IC[it.type] }), h('div', null, h('h2', { text: t('items.' + it.type + '.name') }), h('small', { text: t('items.' + it.type + '.desc') }))),
-        h('p', { 'data-test': 'item-effect', text: itemEffect(it.type) }), h('p', { class: 'note', text: t('items.area') }), h('button', { class: 'btn primary', onclick: close }, t('info.close'))));
+        h('p', { 'data-test': 'item-effect', text: itemEffect(it.type) }), h('p', { class: 'note', text: t('items.area') }),
+        h('div', { class: 'row' }, h('button', { class: 'btn', 'data-test': 'item-move', onclick: () => { close(); this.closeSheet(); this.ctrl.startMoveItem(it.id); } }, '↔ ' + t('items.move')),
+          h('button', { class: 'btn primary', onclick: close }, t('info.close')))));
     }
     let staff = null, desk = null;
     if (hit.kind === 'staff') { staff = s.staff.find((x) => x.id === hit.id); desk = staff && s.desks.find((d) => d.id === staff.deskId); }

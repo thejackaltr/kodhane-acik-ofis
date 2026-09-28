@@ -17,7 +17,7 @@ export class OfficeScene extends Phaser.Scene {
   constructor(ctrl, opts) {
     super('office');
     this.ctrl = ctrl; this.opts = opts || {};
-    this.userZoom = 1; this.dpr = opts.dpr || 1;
+    this.userZoom = 1; this.dpr = opts.dpr || 1; this.userAdjusted = false; // v2.1: refit on resize until the player zooms/pans
     this.staffSprites = new Map(); this.deskSprites = new Map(); this.itemSprites = new Map();
     this.world = []; this.hl = []; this.glows = []; this.glowTimer = null; this.pendingTile = null;
     this.animT = 0; this.frameToggle = false;
@@ -37,6 +37,7 @@ export class OfficeScene extends Phaser.Scene {
       c.on('hired', (r) => this.onHired(r)),
       c.on('deskPlaced', (d) => this.addDesk(d, true)),
       c.on('itemPlaced', (it) => { this.addItem(it, true); this.flashGlow(); }),
+      c.on('itemMoved', (it) => { const o = this.itemSprites.get(it.id); if (o) { o.destroy(); this.itemSprites.delete(it.id); } this.addItem(it, true); this.flashGlow(); }),
       c.on('event', (id) => this.playEventVisual(id)),
       c.on('promoted', (s) => this.refreshStaff(s)),
       c.on('delivered', (d) => this.onDelivered(d)),
@@ -44,7 +45,7 @@ export class OfficeScene extends Phaser.Scene {
       c.on('placing', (p) => this.showPlacement(p)),
       c.on('tutorial', () => this.updateArrow())
     ];
-    this.scale.on('resize', () => this.fitCamera(false));
+    this.scale.on('resize', () => this.fitCamera(!this.userAdjusted));
     this.updateArrow();
     this.opts.onReady && this.opts.onReady(this);
   }
@@ -332,8 +333,9 @@ export class OfficeScene extends Phaser.Scene {
   showPlacement(p) {
     for (const h of this.hl) h.setVisible(false);
     this.ghost.setVisible(false); this.pendingTile = null;
+    for (const [iid, o] of this.itemSprites) o.setAlpha(p && p.moveId === iid ? 0.4 : 1);   // v2.1: the item being moved is dimmed
     if (!p) { if (!this.glowTimer) this.hideGlow(); return; }
-    this.showGlow(E.glowTiles(this.ctrl.state));
+    this.showGlow(E.glowTiles(this.ctrl.state, p.moveId));
     const spots = G.validSpots(this.ctrl.state, p.kind);
     let i = 0;
     for (const [gx, gy] of spots) {
@@ -359,7 +361,7 @@ export class OfficeScene extends Phaser.Scene {
   previewItem(p, gx, gy, ok) {
     const st = this.ctrl.state;
     this.pendingTile = ok ? gx + ',' + gy : null;
-    this.showGlow(E.glowTiles(st), ok ? { tiles: E.itemPreviewTiles(st, p.item, gx, gy), kind: ITEMS[p.item].reward ? 'reward' : 'speed' } : null);
+    this.showGlow(E.glowTiles(st, p.moveId), ok ? { tiles: E.itemPreviewTiles(st, p.item, gx, gy), kind: ITEMS[p.item].reward ? 'reward' : 'speed' } : null);
   }
 
   // ------------------------------------------------------------ tutorial arrow
@@ -377,8 +379,8 @@ export class OfficeScene extends Phaser.Scene {
     const vw = this.scale.width / this.dpr, vh = this.scale.height / this.dpr;
     const padTop = this.opts.padTop || 70, padBottom = this.opts.padBottom || 80;
     const fit = Math.min(vw / (b.w + 8), (vh - padTop - padBottom) / (b.h + 8));
-    this.fitZoom = Math.max(0.38, Math.min(2.2, fit));
-    if (recenter) this.userZoom = this.fitZoom;
+    this.fitZoom = Math.max(0.2, Math.min(2.2, fit));   // v2.1: no floor that could crop the 14x14 Ajans on small phones
+    if (recenter) { this.userZoom = this.fitZoom; this.userAdjusted = false; }
     this.userZoom = Phaser.Math.Clamp(this.userZoom, this.fitZoom * 0.7, 3);
     cam.setZoom(this.userZoom * this.dpr);
     if (recenter) cam.centerOn(b.cx, b.cy + (padBottom - padTop) / 2 / this.userZoom);
@@ -390,8 +392,11 @@ export class OfficeScene extends Phaser.Scene {
     const x = Phaser.Math.Clamp(c.x, b.L, b.R), y = Phaser.Math.Clamp(c.y, b.T, b.B);
     if (x !== c.x || y !== c.y) cam.centerOn(x, y);
   }
+  // v2.1: back to "whole office on screen" (fit button, stage change)
+  fitView() { this.fitCamera(true); }
   zoomBy(f, sx, sy) {
     const cam = this.cameras.main;
+    this.userAdjusted = true;
     const before = cam.getWorldPoint(sx, sy);
     this.userZoom = Phaser.Math.Clamp(this.userZoom * f, this.fitZoom * 0.7, 3);
     cam.setZoom(this.userZoom * this.dpr);
@@ -412,6 +417,7 @@ export class OfficeScene extends Phaser.Scene {
         pinch = { d: Phaser.Math.Distance.Between(ps[0].x, ps[0].y, ps[1].x, ps[1].y), z: this.userZoom };
         return;
       }
+      if (this.pinchEnd && this.time.now - this.pinchEnd < 250) { start = null; return; }   // v2.1: finger left over from a pinch is not a tap
       start = { x: p.x, y: p.y, sx: cam.scrollX, sy: cam.scrollY, t: this.time.now, moved: false, id: p.id };
       clearLong();
       longTimer = this.time.delayedCall(LONG_MS, () => {
@@ -432,11 +438,11 @@ export class OfficeScene extends Phaser.Scene {
       if (!start || !p.isDown || p.id !== start.id) return;
       const dx = p.x - start.x, dy = p.y - start.y;
       if (!start.moved && Math.hypot(dx, dy) > TAP_MOVE * this.dpr) { start.moved = true; clearLong(); }
-      if (start.moved) { cam.scrollX = start.sx - dx / cam.zoom; cam.scrollY = start.sy - dy / cam.zoom; this.clampCam(); }
+      if (start.moved) { this.userAdjusted = true; cam.scrollX = start.sx - dx / cam.zoom; cam.scrollY = start.sy - dy / cam.zoom; this.clampCam(); }
     });
     this.input.on('pointerup', (p) => {
       clearLong();
-      if (pinch) { if (!this.input.pointer1.isDown && !this.input.pointer2.isDown) pinch = null; start = null; return; }
+      if (pinch) { if (!this.input.pointer1.isDown && !this.input.pointer2.isDown) { pinch = null; this.pinchEnd = this.time.now; } start = null; return; }
       if (start && !start.moved && !start.long && p.id === start.id) {
         const wp = cam.getWorldPoint(p.x, p.y);
         this.tap(wp.x, wp.y);

@@ -51,6 +51,7 @@ const ui = new UI(document.getElementById('ui'), ctrl, {
   leaderboard: lbHolder,
   install,
   zoom: (f) => scene && scene.zoomBy(f, scene.scale.width / 2, scene.scale.height / 2),
+  fit: () => scene && scene.fitView(),
   snapshot: (cb) => snapshot(cb),
   onReset: () => { ctrl.reset(); },
   changeLocale

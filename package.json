@@ -1,6 +1,6 @@
 {
   "name": "kodhane-acik-ofis",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Kodhane: Açık Ofis — izometrik ofis tycoon (Phaser 3 + Vite)",
   "scripts": {
     "dev": "vite",

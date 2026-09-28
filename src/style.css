@@ -40,7 +40,7 @@ button { font: inherit; }
 .hint.pop { animation: pop .35s ease-out; }
 @keyframes pop { from { transform: translateX(-50%) scale(.85); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 .zoom { position: fixed; right: 8px; top: calc(70px + var(--safe-t)); display: flex; flex-direction: column; gap: 6px; }
-@media (pointer: coarse) { .zoom { display: none; } }
+@media (pointer: coarse) { .zoom .zin, .zoom .zout { display: none; } }   /* v2.1: phones keep the fit button; pinch zooms */
 
 .nav { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px 8px calc(6px + var(--safe-b)); background: rgba(42,34,48,.92); backdrop-filter: blur(6px); }
 .nav-btn { position: relative; min-height: 56px; border: 0; border-radius: 14px; background: rgba(255,248,239,.1); color: #f3e6d8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; font-size: 12px; font-weight: 650; }
@@ -136,5 +136,10 @@ button { font: inherit; }
 .card-side .btn { max-width: 100%; }
 .hint, .toast, .placebar span { overflow-wrap: anywhere; }
 .placebar { white-space: normal; max-width: calc(100vw - 16px); }
+/* v2.1: wide enough for one/two lines of label, the cancel button never wraps; hint sits above a two-line bar */
+.placebar { width: min(calc(100vw - 16px), 440px); }
+.placebar span { flex: 1; min-width: 0; }
+.placebar .btn { white-space: nowrap; flex-shrink: 0; }
+.placebar:not(.hidden) ~ .hint, .hint:has(~ .placebar:not(.hidden)) { bottom: calc(150px + var(--safe-b)); }
 .lang { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; font-weight: 650; }
 .lang select { min-height: 44px; font: inherit; border-radius: 10px; }

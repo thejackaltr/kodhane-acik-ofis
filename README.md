@@ -14,6 +14,11 @@ Mahalle dairesinde bir laptop ve demlenen çayla başla: müşteri tekliflerini 
 - Tüm zamanlar sıralaması (Kodhane takma adıyla ortak, `kodhane_leaderboard(p_game='acik_ofis')`), anonim aşama sayacı (`acikofis_stage_0..2`, kişisel veri yok).
 - v1 kayıtları kayıpsız taşınır (aynı anahtar `acik_ofis_save_v1`).
 
+## v2.1 ile gelenler
+- Telefonda görünüm: açılışta, taşınınca ve ekran dönünce tüm ofis ekrana sığar; iki parmakla yakınlaştır, sürükleyerek kaydır (masaya/eşyaya dokunmak sürüklemeyle karışmaz), ⤢ düğmesi tüm ofisi geri getirir.
+- Eşyalar ücretsiz taşınabilir: eşyaya dokun → "Taşı" → yeni kare (satış/iade yok).
+- Tanıtım videosu için hazır kayıt: `tools/promo/before-ajans.console.js` (Ajans'a taşınmadan hemen önce).
+
 ## v1'de neler var
 - Tek kat, sabit 10×10 izometrik ızgara (2:1, 64×32 karo). İki görünüm: **Ev Ofisi** (6×6 mahalle dairesi) ve taşınınca **Butik Stüdyo** (10×10). **Ajans** "yakında".
 - Ana döngü: teklif kabul et → boştaki ekip otomatik atanır (çalışana dokunup başka projeye atanabilir) → masalarda çalışırlar → teslimde para → masa/çalışan al.

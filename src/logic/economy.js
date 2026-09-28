@@ -47,9 +47,10 @@ export function speedMult(state) { return upgradeMult(state) * buffMult(state); 
 const layoutCache = new WeakMap();
 function layoutSig(state) {
   const it = state.items || [], d = state.desks;
-  let pm = '';
+  let pm = '', pos = '';
+  for (const x of it) pos += x.id + '@' + x.gx + ',' + x.gy + ';';   // v2.1: items can move
   for (const s of state.staff) if (STAFF[s.type] && STAFF[s.type].adjSpeed) pm += s.deskId + ',';
-  return d.length + ':' + (d.length ? d[d.length - 1].id : 0) + ':' + it.length + ':' + (it.length ? it[it.length - 1].id : 0) + ':' + pm + ':' + state.stage;
+  return d.length + ':' + (d.length ? d[d.length - 1].id : 0) + ':' + pos + ':' + pm + ':' + state.stage;
 }
 export function layoutBonus(state) {
   const sig = layoutSig(state), c = layoutCache.get(state);
@@ -80,10 +81,10 @@ export function layoutBonus(state) {
 export function deskSpeedBonus(state, deskId) { return layoutBonus(state).speed.get(deskId) || 0; }
 export function deskRewardBonus(state, deskId) { return layoutBonus(state).reward.get(deskId) || 0; }
 // glowing tiles: every item's area + the ring around each Proje Yöneticisi's desk. Map "gx,gy" -> 'speed'|'reward'
-export function glowTiles(state) {
+export function glowTiles(state, excludeItemId) {
   const out = new Map();
   for (const it of state.items || []) {
-    const def = ITEMS[it.type]; if (!def) continue;
+    const def = ITEMS[it.type]; if (!def || it.id === excludeItemId) continue;
     for (const [x, y] of areaTiles(state.stage, it.gx, it.gy, def.radius)) { const k = x + ',' + y; if (out.get(k) !== 'reward') out.set(k, def.reward ? 'reward' : 'speed'); }
   }
   for (const s of state.staff) {
@@ -179,6 +180,17 @@ export function buyItem(state, type, gx, gy) {
   const it = { id: state.nextId++, type, gx, gy };
   state.items.push(it);
   return { ok: true, item: it, cost };
+}
+// v2.1: move a placed item to another free tile, free of charge (no selling / refund)
+export function moveItem(state, itemId, gx, gy) {
+  const it = (state.items || []).find((x) => x.id === itemId);
+  if (!it) return { ok: false, reason: 'yok' };
+  if (!Number.isInteger(gx) || !Number.isInteger(gy)) return { ok: false, reason: 'yer' };
+  if (it.gx === gx && it.gy === gy) return { ok: false, reason: 'ayni' };
+  const occ = occupancy(state); occ.delete(it.gx + ',' + it.gy);
+  if (!canPlace(state, ITEMS[it.type].kind, gx, gy, occ)) return { ok: false, reason: 'yer' };
+  it.gx = gx; it.gy = gy;
+  return { ok: true, item: it, cost: 0 };
 }
 export function maxActiveProjects(state) { return Math.min(4, 1 + Math.floor((state.staff.length - 1) / 3)); }
 export function autoAccept(state) { return state.upgrades.some((id) => UPGRADES[id] && UPGRADES[id].autoAccept); }
