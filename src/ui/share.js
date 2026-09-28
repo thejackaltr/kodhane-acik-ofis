@@ -31,7 +31,7 @@ export function composeImage(img, state, loc = location, crop = null) {
   x.fillStyle = '#ffffff'; x.font = '800 64px ' + font;
   x.fillText(t('stages.' + STAGES[state.stage].id), W / 2, 142);
   x.fillStyle = '#f3e6d8'; x.font = '500 36px ' + font;
-  x.fillText(t('share.caption', { n: state.staff.length, p: state.projectsDone }), W / 2, H - 100);
+  x.fillText(t('share.caption', { stage: t('stages.' + STAGES[state.stage].id), n: state.staff.length, p: state.projectsDone }), W / 2, H - 100);
   x.fillStyle = '#ffb35c'; x.font = '700 34px ' + font;
   x.fillText(prettyUrl(loc), W / 2, H - 46);
   return c;

@@ -67,7 +67,7 @@ const S = (p) => p.evaluate(() => { const s = window.__acikOfis.ctrl.state; retu
   await p.tap('[data-test=nav-team]');
   await p.tap('[data-test=hire-btn-stajyer]');
   await p.waitForTimeout(300);
-  check('m: placement mode with desk hint', (await p.textContent('[data-test=hint]')).startsWith('Ona bir masa lazım'));
+  check('m: placement mode with desk hint (touch: dokun)', (await p.textContent('[data-test=hint]')) === 'Stajyerin masa istiyor. Boş bir yere dokun.', await p.textContent('[data-test=hint]'));
   const spot = await p.evaluate(() => { const s = window.__acikOfis.scene; const h = s.hl.filter((x) => x.visible)[2]; return s.worldToCss(h.x, h.y); });
   await p.touchscreen.tap(spot.x, spot.y);
   await p.waitForTimeout(2600);
@@ -113,6 +113,7 @@ const S = (p) => p.evaluate(() => { const s = window.__acikOfis.ctrl.state; retu
   await p.waitForTimeout(500);
   const share = await p.evaluate(() => window.__lastShare);
   check('m: share image composed 1080x1080', share && share.width === 1080 && share.height === 1080);
+  check('m: share text (v1.0.1)', share && share.text === "Kodhane: Açık Ofis'te ekibim " + st.staff + ' kişi oldu, ' + (await S(p)).done + ' proje teslim ettik. Sen de ofisini kur:', share && share.text);
   check('m: share URL has UTM', share && share.url.includes('utm_source=share&utm_medium=office&utm_campaign=acik-ofis'), share && share.url);
   await p.screenshot({ path: path.join(shots, 'share-preview-mobile.png') });
   const dlP = p.waitForEvent('download', { timeout: 5000 });
@@ -213,6 +214,56 @@ for (const vp of [{ name: 'mobile', viewport: { width: 390, height: 844 }, devic
     check('m: drag to pan', (await p.evaluate(() => window.__acikOfis.scene.cameras.main.scrollX)) !== c0);
   }
   check(vp.name + ': no console errors', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+
+// ================================================================ v1.0.1: desktop "tıkla" texts, Senior, Kodhane referral counter
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, locale: 'tr-TR' });
+  const p = await ctx.newPage();
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+  await p.goto(base); await ready(p);
+  check('d: pointer is fine on desktop', await p.evaluate(() => matchMedia('(pointer: fine)').matches));
+  const lap = await p.evaluate(() => window.__acikOfis.scene.laptopScreen());
+  await p.mouse.click(lap.x, lap.y);
+  await p.waitForSelector('[data-test=accept]', { timeout: 3000 });
+  await p.click('[data-test=accept]');
+  for (let i = 0; i < 40 && (await S(p)).done < 1; i++) { await p.mouse.click(lap.x, lap.y); await p.waitForTimeout(90); }
+  await p.click('[data-test=nav-team]');
+  const teamTxt = await p.textContent('.sheet');
+  check('d: Senior shown in team list (no Kıdemli)', teamTxt.includes('Senior') && !teamTxt.includes('Kıdemli'), teamTxt.slice(0, 200));
+  await p.click('[data-test=hire-btn-stajyer]');
+  await p.waitForTimeout(300);
+  check('d: desk hint says tıkla on desktop', (await p.textContent('[data-test=hint]')) === 'Stajyerin masa istiyor. Boş bir yere tıkla.', await p.textContent('[data-test=hint]'));
+  check('d: no page errors (v1.0.1)', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+{
+  // opened from Kodhane -> local flag; first cloud save counts 'acikofis_cloud_signup_kodhane' once with the anon key (mocked backend)
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'tr-TR' });
+  const hits = []; let rows = [];
+  await ctx.route('https://supabase.teserix.com/**', async (route) => {
+    const r = route.request(); const u = new URL(r.url()); const auth = r.headers()['authorization'] || '';
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'content-type': 'application/json' };
+    if (r.method() === 'OPTIONS') return route.fulfill({ status: 200, headers: cors, body: '' });
+    if (u.pathname === '/rest/v1/rpc/kodhane_count_event') { hits.push({ ev: JSON.parse(r.postData()).p_event, anon: auth === 'Bearer ' + r.headers()['apikey'] }); return route.fulfill({ status: 200, headers: cors, body: 'true' }); }
+    if (u.pathname === '/rest/v1/acik_ofis_saves' && r.method() === 'GET') return route.fulfill({ status: 200, headers: cors, body: JSON.stringify(rows) });
+    if (u.pathname === '/rest/v1/acik_ofis_saves' && r.method() === 'POST') { const b = JSON.parse(r.postData()); rows = [{ data: b.data, save_version: b.save_version, updated_at: b.updated_at }]; return route.fulfill({ status: 201, headers: cors, body: '' }); }
+    return route.fulfill({ status: 404, headers: cors, body: '{}' });
+  });
+  const p = await ctx.newPage();
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+  await p.goto(base + '?utm_source=kodhane&utm_medium=news&utm_campaign=acikofis_v1'); await ready(p);
+  check('ref: utm_source=kodhane remembered locally', await p.evaluate(() => localStorage.getItem('acik_ofis_from_kodhane')) === '1');
+  check('ref: no network call before a cloud save', hits.length === 0);
+  // simulate a signed-in session (fake token, mocked backend), then reload -> reconcile -> first cloud save
+  await p.evaluate(() => localStorage.setItem('acik_ofis_auth_v1', JSON.stringify({ access_token: 'fake', refresh_token: 'fake', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: '00000000-0000-0000-0000-000000000001', email: 'x@example.invalid' } })));
+  await p.goto(base); await ready(p);
+  await p.waitForTimeout(1500);
+  check('ref: first cloud save counted once, anonymously (anon key)', hits.length === 1 && hits[0].ev === 'acikofis_cloud_signup_kodhane' && hits[0].anon && rows.length === 1, JSON.stringify(hits));
+  await p.reload(); await ready(p); await p.waitForTimeout(1500);
+  check('ref: not counted again (cloud save exists, flag set)', hits.length === 1, JSON.stringify(hits));
+  check('ref: no page errors', errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
 

@@ -1,11 +1,11 @@
 // Kodhane: Açık Ofis — entry point.
 import Phaser from 'phaser';
 const LOCALES = import.meta.glob('./locales/*.json', { eager: true, import: 'default' });
-import { registerLocales, detect, setLocale, setPseudo, locale, t } from './logic/i18n.js';
+import { registerLocales, detect, setLocale, setPseudo, setPointerFine, locale, t } from './logic/i18n.js';
 import { Controller } from './game.js';
 import { OfficeScene } from './render/OfficeScene.js';
 import { UI } from './ui/ui.js';
-import { CloudSync } from './cloud/cloud.js';
+import { CloudSync, rememberReferral } from './cloud/cloud.js';
 import { CloudUI } from './cloud/cloudUi.js';
 import './style.css';
 
@@ -14,6 +14,9 @@ const LOCALE_KEY = 'acik_ofis_locale';
 registerLocales(Object.fromEntries(Object.entries(LOCALES).map(([p, d]) => [p.match(/([\w-]+)\.json$/)[1], d])));
 let storedLocale = null; try { storedLocale = localStorage.getItem(LOCALE_KEY); } catch (e) { /* private mode */ }
 setLocale(detect(navigator.languages || [navigator.language], storedLocale));
+rememberReferral(location.search); // came from Kodhane? (local flag only)
+// mouse/trackpad: "tıkla" texts instead of "dokun"
+try { const mq = window.matchMedia('(pointer: fine)'); setPointerFine(mq.matches); if (mq.addEventListener) mq.addEventListener('change', (e) => setPointerFine(e.matches)); } catch (e) { /* old browsers: touch texts */ }
 const pseudo = new URLSearchParams(location.search).get('pseudo'); if (pseudo) setPseudo(pseudo); // layout test aid
 document.documentElement.lang = locale();
 document.title = t('meta.title');

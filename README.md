@@ -9,7 +9,7 @@ Mahalle dairesinde bir laptop ve demlenen çayla başla: müşteri tekliflerini 
 ## v1'de neler var
 - Tek kat, sabit 10×10 izometrik ızgara (2:1, 64×32 karo). İki görünüm: **Ev Ofisi** (6×6 mahalle dairesi) ve taşınınca **Butik Stüdyo** (10×10). **Ajans** "yakında".
 - Ana döngü: teklif kabul et → boştaki ekip otomatik atanır (çalışana dokunup başka projeye atanabilir) → masalarda çalışırlar → teslimde para → masa/çalışan al.
-- Çalışanlar: Stajyer, Junior, Tasarımcı, Kıdemli ve Butik Stüdyo'da açılan **Yapay Zekâ Ajanı**. Stajyer→Junior→Kıdemli terfisi aynı masada. Kod ve tasarım iki ayrı iş türü (tasarımcı tasarım ağırlıklı işleri hızlandırır).
+- Çalışanlar: Stajyer, Junior, Tasarımcı, Senior ve Butik Stüdyo'da açılan **Yapay Zekâ Ajanı**. Stajyer→Junior→Senior terfisi aynı masada. Kod ve tasarım iki ayrı iş türü (tasarımcı tasarım ağırlıklı işleri hızlandırır).
 - Masa yerleştirme (2×1 masa + arkasında oturma sırası), 4 geliştirme (Demlik çay, Proje panosu = otomatik teklif alma, Mekanik klavye, Ergonomik sandalye).
 - Rehberli ilk dakikalar: her seferinde tek, tek cümlelik ipucu; iş bitince kaybolur.
 - 5 iki seçenekli olay kartı (ilki dakika 3 civarında "Logoyu biraz daha büyütebilir miyiz?").

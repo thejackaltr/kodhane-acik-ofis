@@ -11,6 +11,9 @@ const DEFAULTS = {
   table: 'acik_ofis_saves',
   storageKey: 'acik_ofis_auth_v1',
   pendingKey: 'acik_ofis_auth_pending',
+  referralKey: 'acik_ofis_from_kodhane',       // opened from Kodhane (utm_source=kodhane), remembered locally
+  referralCountedKey: 'acik_ofis_kodhane_signup_counted',
+  countRpc: 'kodhane_count_event',
   pushDelayMs: 30000,
   timeoutMs: 15000
 };
@@ -18,6 +21,11 @@ const DEFAULTS = {
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
 function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
+// remember (locally only) that this player came from Kodhane; no network, no personal data
+export function rememberReferral(search, cfg) {
+  const c = Object.assign({}, DEFAULTS, cfg || {});
+  try { if (new URLSearchParams(search || '').get('utm_source') === 'kodhane') lsSet(c.referralKey, '1'); } catch (e) { /* ignore */ }
+}
 export function isOnline() { return !('onLine' in navigator) || navigator.onLine !== false; }
 
 export class CloudClient {
@@ -86,6 +94,8 @@ export class CloudClient {
     });
     return now;
   }
+  // anonymous per-day counter on the Kodhane Supabase (anon key only, never the user token; no personal data)
+  countEvent(name) { return this.api('/rest/v1/rpc/' + this.cfg.countRpc, { method: 'POST', body: { p_event: name } }); }
   async signOut() {
     const tok = this.session && this.session.access_token;
     this.clearSession();
@@ -179,7 +189,8 @@ export class CloudSync {
           lsSet(BACKUP_KEY, JSON.stringify(cloud));
         }
         this.reconciled = true;
-        await this.pushNow(true);
+        const pushed = await this.pushNow(true);
+        if (!row && pushed) this.countKodhaneSignup();
         if (note) this.toastKey = note;
       } catch (e) {
         this.set('error', this.errKey(e, 'cloud.unreachable'));
@@ -188,6 +199,14 @@ export class CloudSync {
       } finally { this.reconciling = null; }
     })();
     return this.reconciling;
+  }
+  // first cloud save of a player who came from Kodhane -> count once (anonymous)
+  countKodhaneSignup() {
+    const c = this.client.cfg;
+    if (lsGet(c.referralKey) !== '1' || lsGet(c.referralCountedKey)) return false;
+    lsSet(c.referralCountedKey, '1');
+    this.client.countEvent('acikofis_cloud_signup_kodhane').catch(() => {});
+    return true;
   }
   schedulePush() {
     if (!this.client.user || !this.reconciled || this.pushTimer) return;

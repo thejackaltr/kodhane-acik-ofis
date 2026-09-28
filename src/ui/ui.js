@@ -1,6 +1,6 @@
 // DOM overlay UI: HUD, bottom nav + sheets, hints, modals (event cards, welcome back, info, menu, share, cloud).
 import { h, clear } from './dom.js';
-import { t, item, upper, available, locale } from '../logic/i18n.js';
+import { t, tp, item, upper, available, locale } from '../logic/i18n.js';
 import { tl, fmt, fmtDuration } from '../logic/format.js';
 import * as E from '../logic/economy.js';
 import { STAFF, STAFF_ORDER, STAGES, FUTURE_STAGES, UPGRADES, UPGRADE_ORDER, CFG } from '../logic/config.js';
@@ -102,7 +102,7 @@ export class UI {
   }
   renderHint() {
     const hint = this.ctrl.hint();
-    const txt = hint ? t(hint.key) : '';
+    const txt = hint ? tp(hint.key) : '';
     if (this.hintEl.textContent !== txt) {
       this.hintEl.textContent = txt;
       this.hintEl.classList.toggle('hidden', !txt);
@@ -165,7 +165,7 @@ export class UI {
       body.append(h('div', { class: 'card staff' + (unlocked ? '' : ' locked'), 'data-test': 'hire-' + type },
         h('div', { class: 'avatar av-' + type, 'aria-hidden': 'true' }),
         h('div', { class: 'card-main' }, h('b', { text: t('staff.' + type + '.name') + (n ? ' ×' + n : '') }),
-          h('small', { text: unlocked ? t('staff.' + type + '.desc') : lock }),
+          h('small', { text: unlocked ? tp('staff.' + type + '.desc') : lock }),
           unlocked ? h('small', { class: 'dim', text: t('team.rate', { kod: fmt(def.kod), tasarim: fmt(def.tasarim) }) }) : null),
         h('div', { class: 'card-side' },
           h('span', { class: 'price', text: unlocked ? tl(cost) : '🔒' }),
@@ -266,10 +266,10 @@ export class UI {
       if (!staff) { box.append(h('h2', { text: t('info.desk') }), h('p', { text: t('info.deskFree') }), h('button', { class: 'btn primary', onclick: () => { close(); this.openSheet('team'); } }, t('team.hire'))); return; }
       const def = STAFF[staff.type];
       const proj = s.projects.find((p) => p.id === staff.projectId);
-      box.append(h('div', { class: 'info-head' }, h('div', { class: 'avatar av-' + staff.type }), h('div', null, h('h2', { text: t('staff.' + staff.type + '.name') }), h('small', { text: t('staff.' + staff.type + '.desc') }))),
+      box.append(h('div', { class: 'info-head' }, h('div', { class: 'avatar av-' + staff.type }), h('div', null, h('h2', { text: t('staff.' + staff.type + '.name') }), h('small', { text: tp('staff.' + staff.type + '.desc') }))),
         h('p', { class: 'dim', text: t('team.rate', { kod: fmt(def.kod), tasarim: fmt(def.tasarim) }) }),
         h('p', { text: proj ? t('team.busy', { p: t('projects.' + proj.key) }) : t('team.idle') }));
-      if (staff.type === 'kurucu') box.append(h('p', { class: 'note', text: t('team.you') }));
+      if (staff.type === 'kurucu') box.append(h('p', { class: 'note', text: tp('team.you') }));
       if (s.projects.length > 1 || (!proj && s.projects.length)) {
         box.append(h('h3', { text: t('team.assign') }));
         for (const p of s.projects) box.append(h('button', { class: 'btn' + (p.id === staff.projectId ? ' primary' : ''), onclick: () => { this.ctrl.assign(staff.id, p.id); close(); } }, t('projects.' + p.key)));

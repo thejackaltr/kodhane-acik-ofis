@@ -41,6 +41,11 @@ export function t(key, vars) {
   if (typeof v !== 'string') return key;
   return stretch(fill(v, vars));
 }
+// pointer-aware variants: on a fine pointer (mouse/trackpad) '<key>Fine' ("tıkla") replaces '<key>' ("dokun") when it exists
+let FINE = false;
+export function setPointerFine(v) { FINE = !!v; }
+export function pointerFine() { return FINE; }
+export function tp(key, vars) { return FINE && typeof raw(key + 'Fine') === 'string' ? t(key + 'Fine', vars) : t(key, vars); }
 export function list(key) { const v = raw(key); return Array.isArray(v) ? v.map(stretch) : []; }
 export function item(key, i, vars) { const v = raw(key); return Array.isArray(v) && v.length ? stretch(fill(v[((i % v.length) + v.length) % v.length], vars)) : key; }
 // locale-aware case mapping (Turkish i/İ, ı/I)

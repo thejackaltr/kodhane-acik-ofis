@@ -28,7 +28,8 @@
   "staff": {
     "kurucu": {
       "name": "Sen",
-      "desc": "Kurucu. Laptopa dokununca daha hızlı yazar."
+      "desc": "Kurucu. Laptopa dokununca daha hızlı yazar.",
+      "descFine": "Kurucu. Laptopa tıklayınca daha hızlı yazar."
     },
     "stajyer": {
       "name": "Stajyer",
@@ -43,7 +44,7 @@
       "desc": "Tasarım işlerini uçurur."
     },
     "kidemli": {
-      "name": "Kıdemli",
+      "name": "Senior",
       "desc": "Her hatayı daha önce görmüş."
     },
     "yzajan": {
@@ -72,7 +73,8 @@
     "laptop": "Laptop açık, çay demde. İlk müşteri kapıda.",
     "basla": "Kafe menüsü için site istiyorlar. Başla!",
     "stajyer": "Yalnız yetişmiyor. Bir stajyer al?",
-    "masa": "Ona bir masa lazım, boş bir yere dokun.",
+    "masa": "Stajyerin masa istiyor. Boş bir yere dokun.",
+    "masaFine": "Stajyerin masa istiyor. Boş bir yere tıkla.",
     "teklif": "Yeni teklif geldi, Teklifler'e bak."
   },
   "offers": {
@@ -103,7 +105,8 @@
     "idle": "Boşta",
     "assign": "Projeye ata",
     "unassign": "Boşa al",
-    "you": "Laptopa dokun, daha hızlı yaz."
+    "you": "Laptopa dokun, daha hızlı yaz.",
+    "youFine": "Laptopa tıkla, daha hızlı yaz."
   },
   "office": {
     "title": "Ofis",
@@ -255,8 +258,8 @@
     "copy": "Bağlantıyı kopyala",
     "copied": "Bağlantı kopyalandı.",
     "downloaded": "Resim indirildi.",
-    "text": "{stage} ofisim büyüyor: {n} kişilik ekip, {p} proje. Sen de kur:",
-    "caption": "{n} kişilik ekip · {p} proje teslim",
+    "text": "Kodhane: Açık Ofis'te ekibim {n} kişi oldu, {p} proje teslim ettik. Sen de ofisini kur:",
+    "caption": "{stage} · {n} kişilik ekip · {p} proje teslim",
     "close": "Kapat",
     "fail": "Paylaşılamadı; resmi indirip bağlantıyı kopyalayabilirsin."
   },
@@ -276,7 +279,7 @@
     "resend": "Kodu tekrar gönder",
     "resendIn": "Kodu tekrar gönder ({s} sn)",
     "changeEmail": "Başka adres",
-    "spam": "Gelmezse gereksiz klasörüne bak.",
+    "spam": "Gelmediyse spam klasörüne de bak.",
     "signedIn": "{email} ile giriş yaptın.",
     "syncing": "Buluta kaydediliyor…",
     "synced": "Buluta kaydedildi · {t}",
