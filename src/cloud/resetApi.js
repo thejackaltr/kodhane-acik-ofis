@@ -11,10 +11,10 @@
  *    strict) or "stale_write" (legacy write without a new revision that would lower totalEarned).
  *    On 409 the client re-reads the row, loads it (never overwrites it) and shows reset.otherDevice.
  *  - RPC names: game-specific, kept only in cloud.js `RPC` (reset = acik_ofis_reset_save, restore = acik_ofis_restore_save).
- *  - Reset:   POST /rest/v1/rpc/<RPC.reset>   {} -> { game, revision, backup_id, best_score }
+ *  - Reset:   POST /rest/v1/rpc/<RPC.reset>   {} -> { revision, backup_id, best_score, best_stage }
  *             Row is not deleted: backup taken, progress cleared server-side, revision + 1. No row yet -> revision 0,
  *             backup_id null. best_score (leaderboard), nickname and the account stay.
- *  - Restore: POST /rest/v1/rpc/<RPC.restore> { "p_backup_id": "<uuid>" } -> { game, revision, backup_id, restored_from, best_score }
+ *  - Restore: POST /rest/v1/rpc/<RPC.restore> { "p_backup_id": "<uuid>" } -> { revision, backup_id, restored_from, best_score, best_stage }
  *             Own backup < 30 days only, else 404 code "PT404" message "backup_not_found". No revision check.
  *             The 10 s "Geri al" uses it with the reset's backup_id; the client then writes its (fresher) in-memory
  *             snapshot with revision = returned + 1.
@@ -61,6 +61,8 @@ function uuid() {
 // public.save_score(data): data.totalEarned if a finite number >= 0, else 0
 export function saveScore(d) { const v = d && d.totalEarned; return typeof v === 'number' && isFinite(v) && v >= 0 ? v : 0; }
 // public.save_reset_payload('acik_ofis', old, now): desks/staff/items omitted (migrate() rebuilds the founder office)
+// best_stage (draft acik_ofis migration): data.stage 0..99 of a save with a score (the SQL also checks plausibility)
+export const saveStage = (d) => (d && saveScore(d) > 0 && Number.isFinite(+d.stage) ? Math.min(99, Math.max(0, Math.floor(+d.stage))) : 0);
 export function resetPayload(old, nowMs) {
   const sc = old && old.flags && Array.isArray(old.flags.stagesCounted) ? old.flags.stagesCounted : [];
   return { v: old && typeof old.v === 'number' ? old.v : 2, startedAt: nowMs, lastSaved: nowMs, lastTick: nowMs, resetAt: nowMs,
@@ -101,7 +103,8 @@ export class MockSaveServer {
     const s = this.load(), t = this.now(), clone = data ? JSON.parse(JSON.stringify(data)) : null;
     if (!s.row) {
       const rev = n0(revision), prevBest = s.backups.reduce((m, b) => Math.max(m, b.best || 0), 0);
-      s.row = { data: clone, revision: rev, strict: rev > 0, best: Math.max(saveScore(clone), prevBest), updatedAt: t };
+      const prevStage = s.backups.reduce((m, b) => Math.max(m, b.bestStage || 0), 0);
+      s.row = { data: clone, revision: rev, strict: rev > 0, best: Math.max(saveScore(clone), prevBest), bestStage: Math.max(saveStage(clone), prevStage), updatedAt: t };
     } else {
       const old = s.row;
       let rev = revision == null ? old.revision : n0(revision), strict;
@@ -111,7 +114,7 @@ export class MockSaveServer {
         if (saveScore(clone) < saveScore(old.data)) throw pgError(409, 'PT409', 'stale_write', 'totalEarned would drop');
         rev = old.revision + 1; strict = false;
       } else strict = true;
-      s.row = { data: clone, revision: rev, strict, best: Math.max(old.best, saveScore(clone)), updatedAt: t };
+      s.row = { data: clone, revision: rev, strict, best: Math.max(old.best, saveScore(clone)), bestStage: Math.max(old.bestStage || 0, saveStage(clone)), updatedAt: t };
     }
     this.store(s, false);
     return { revision: s.row.revision };
@@ -119,12 +122,12 @@ export class MockSaveServer {
   // rpc RPC.reset (UPDATE fires save_before_write with a higher revision -> the row becomes strict)
   async resetSave() {
     const s = this.load(), t = this.now();
-    if (!s.row) return { game: GAME, revision: 0, backup_id: null, best_score: 0 };
+    if (!s.row) return { revision: 0, backup_id: null, best_score: 0, best_stage: 0 };
     const id = uuid();
-    s.backups.unshift({ id, revision: s.row.revision, payload: s.row.data, best: s.row.best, reason: 'reset', createdAt: t });
+    s.backups.unshift({ id, revision: s.row.revision, payload: s.row.data, best: s.row.best, bestStage: s.row.bestStage || 0, reason: 'reset', createdAt: t });
     s.row = Object.assign({}, s.row, { data: resetPayload(s.row.data, t), revision: s.row.revision + 1, strict: true, updatedAt: t });
     this.store(s, true);
-    return { game: GAME, revision: s.row.revision, backup_id: id, best_score: s.row.best };
+    return { revision: s.row.revision, backup_id: id, best_score: s.row.best, best_stage: s.row.bestStage || 0 };
   }
   // rpc RPC.restore (same: strict afterwards)
   async restoreSave(backupId) {
@@ -133,15 +136,15 @@ export class MockSaveServer {
     let bid = null, rev;
     if (s.row) {
       bid = uuid();
-      s.backups.unshift({ id: bid, revision: s.row.revision, payload: s.row.data, best: s.row.best, reason: 'restore', createdAt: t });
+      s.backups.unshift({ id: bid, revision: s.row.revision, payload: s.row.data, best: s.row.best, bestStage: s.row.bestStage || 0, reason: 'restore', createdAt: t });
       rev = s.row.revision + 1;
       s.row = Object.assign({}, s.row, { data: b.payload, revision: rev, strict: true, updatedAt: t });
     } else {
       rev = b.revision + 1;
-      s.row = { data: b.payload, revision: rev, strict: rev > 0, best: Math.max(saveScore(b.payload), b.best || 0), updatedAt: t };
+      s.row = { data: b.payload, revision: rev, strict: rev > 0, best: Math.max(saveScore(b.payload), b.best || 0), bestStage: Math.max(saveStage(b.payload), b.bestStage || 0), updatedAt: t };
     }
     this.store(s, true);
-    return { game: GAME, revision: rev, backup_id: bid, restored_from: b.id, best_score: s.row.best };
+    return { revision: rev, backup_id: bid, restored_from: b.id, best_score: s.row.best, best_stage: s.row.bestStage || 0 };
   }
 }
 

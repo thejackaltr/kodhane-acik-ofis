@@ -64,7 +64,7 @@ test('mock server: write rule (revision = last seen + 1), PT409 stale_revision /
 });
 test('mock server: RPC.reset keeps the row (backup, cleared payload, revision + 1, best_score kept); RPC.restore; PT404', async () => {
   const srv = new MockSaveServer(memStorage(), { broadcast: false, now: () => T0 });
-  assert.deepEqual(await srv.resetSave(), { game: 'acik_ofis', revision: 0, backup_id: null, best_score: 0 }, 'no row yet');
+  assert.deepEqual(await srv.resetSave(), { revision: 0, backup_id: null, best_score: 0, best_stage: 0 }, 'no row yet');
   await srv.upsert({ data: { v: 2, totalEarned: 5000, money: 70, desks: [1, 2], flags: { stagesCounted: [0, 1] } }, revision: 1 });
   const r = await srv.resetSave();
   assert.equal(r.revision, 2); assert.ok(r.backup_id); assert.equal(r.best_score, 5000);
