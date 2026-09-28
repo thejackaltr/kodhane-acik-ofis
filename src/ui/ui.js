@@ -271,7 +271,7 @@ export class UI {
         close();
         if (!r) return;
         const key = 'events.' + id + '.r' + c + (r.outcome === 'win' ? 'Win' : r.outcome === 'lose' ? 'Lose' : r.pm ? 'Pm' : '');
-        this.toast(t(key) + (r.cash ? ' (' + (r.cash > 0 ? '+' : '−') + tl(Math.abs(r.cash)) + ')' : ''), 'ok');
+        this.toast(t(key, { s: r.buffSec || 0 }) + (r.cash ? ' (' + (r.cash > 0 ? '+' : '−') + tl(Math.abs(r.cash)) + ')' : ''), 'ok');
       };
       add(box, h('div', { class: 'col' },
         h('button', { class: 'btn primary big', 'data-test': 'event-a', onclick: () => pick('a') }, t('events.' + id + '.a')),

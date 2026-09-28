@@ -354,6 +354,8 @@ for (const vp of [{ name: 'mobile', viewport: { width: 390, height: 844 }, devic
   await (vp.hasTouch ? p.tap('[data-test=event-a]') : p.click('[data-test=event-a]'));
   await p.waitForTimeout(300);
   check(v + ': event card closes', !(await p.$('[data-test=event-text]')));
+  const toast = await p.evaluate(() => [...document.querySelectorAll('.toasts > *')].map((e) => e.textContent).join(' | '));
+  check(v + ': result toast has no unfilled {placeholders}', !/[{}]/.test(toast), toast);
   if (vp.name === 'desktop') {
     await p.keyboard.press('Escape'); await p.waitForTimeout(300);
     const pos = await p.evaluate(() => { const sc = window.__acikOfis.scene, s = window.__acikOfis.ctrl.state; const srv = s.items.find((x) => x.type === 'sunucu'); const o = sc.itemSprites.get(srv.id); return sc.worldToCss(o.x, o.y - 12); });
@@ -385,7 +387,7 @@ for (const vp of [{ name: 'mobile', viewport: { width: 390, height: 844 }, devic
   await p.tap('[data-test=move]');
   await p.waitForSelector('[data-test=stageup-text]', { timeout: 4000 });
   await p.waitForTimeout(600);
-  check('stageup: congratulation screen with Yazı\'s text', (await p.textContent('[data-test=stageup-text]')) === "Artık 'biz' diyorsunuz ve bunu gerçekten ciddi söylüyorsunuz." &&
+  check('stageup: congratulation screen with Yazı\'s text', (await p.textContent('[data-test=stageup-text]')) === 'Artık “biz” diyorsunuz ve bunu gerçekten ciddi söylüyorsunuz.' &&
     (await p.textContent('[data-test=stageup-title]')).includes(TR.stages.ajans), await p.textContent('[data-test=stageup-title]'));
   await p.screenshot({ path: path.join(shots, 'v2-stageup-mobile.png') });
   check('counter: stage_0/_1 once at start (fresh v2 save), stage_2 on the move', JSON.stringify(ctx.fake.counts) === '["acikofis_stage_0","acikofis_stage_1","acikofis_stage_2"]', JSON.stringify(ctx.fake.counts));

@@ -23,7 +23,7 @@ export const CFG = {
   staffCostGrowth: 1.15,
   deskCostGrowth: 1.45,
   deskCostGrowthFrom: 16,       // v2: from the 16th extra desk on (Ajans room) desks get cheaper to add
-  deskCostGrowthLate: 1.3
+  deskCostGrowthLate: 1.36
 };
 
 // Employee types. kod/tasarim = work units per second. cost = first hire price.

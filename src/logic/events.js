@@ -41,7 +41,8 @@ export function applyChoice(state, choice) {
   }
   if (eff.buff) {
     const pm = EVENTS[id][choice === 'a' ? 'a' : 'b'].pmHalves && state.staff.some((x) => x.type === 'pm');
-    state.buffs.push({ mult: eff.buff.mult, until: state.simSec + eff.buff.sec * (pm ? 0.5 : 1), src: id });
+    res.buffSec = eff.buff.sec * (pm ? 0.5 : 1);   // shown in result texts as {s}
+    state.buffs.push({ mult: eff.buff.mult, until: state.simSec + res.buffSec, src: id });
     if (pm) res.pm = true;
   }
   state.events.seen.push(id);

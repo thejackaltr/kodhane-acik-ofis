@@ -224,7 +224,7 @@
       "rb": "Ekip gururlu, biraz hızlandı."
     },
     "cuma": {
-      "text": "Cuma akşamı. Birisi \"deploy edelim\" dedi.",
+      "text": "Cuma akşamı. Birisi “deploy edelim” dedi.",
       "a": "Deploy edelim",
       "b": "Pazartesi bakarız",
       "ra": "Ödeme geldi, hafta sonu hotfix yazıldı.",
@@ -263,9 +263,9 @@
     "kedi": {
       "text": "Ofis Kedisi klavyeye yattı, commit gitti.",
       "sub": "Commit mesajı: “ffffffjjjjjjj”.",
-      "a": "Commit’i geri al",
+      "a": "Commit'i geri al",
       "b": "Canlıya çıksın",
-      "ra": "Commit geri alındı, kedi ofisten uzaklaştırıldı.",
+      "ra": "Commit geri alındı, kedi başka bir klavyeye geçti.",
       "rbWin": "“Yeni özellik” diye satıldı.",
       "rbLose": "Küçük bir hata çıktı, ekip düzeltiyor."
     },
@@ -282,16 +282,16 @@
       "text": "Final_v7_son_bu_kesin.pdf geldi.",
       "sub": "Ekte bir de “son_final_revize2.docx” var.",
       "a": "Revizeleri işle",
-      "b": "v6’yı geri öner",
+      "b": "v6'yı geri öner",
       "ra": "v8 de gönderildi.",
       "rb": "Meğer v6 daha iyiymiş."
     },
     "viral": {
-      "text": "Viral iş ağı paylaşımı",
+      "text": "Paylaşımın viral oldu!",
       "sub": "Ekibinin paylaşımı bir gecede herkesin akışına düştü.",
       "a": "Klavye başına!",
-      "b": "Müşterilere yönlendir",
-      "ra": "Herkes kod yazıyor: 60 sn boyunca ekip daha hızlı!",
+      "b": "Hemen kazanca çevir",
+      "ra": "Herkes kod yazıyor: {s} sn boyunca ekip daha hızlı!",
       "rb": "Gelen kutusu doldu."
     }
   },
@@ -301,7 +301,7 @@
       "Sen yokken ekip {p} proje teslim etti, kedi {k} kez klavyeye yattı.",
       "Sen yokken {p} proje bitti, çay en az üç kez demlendi.",
       "Sen yokken {p} müşteri mutlu ayrıldı, kedi {k} kez klavyede uyudu.",
-      "Sen yokken ekip {p} işi teslim etti ve kimse \"bende çalışıyordu\" demedi."
+      "Sen yokken ekip {p} işi teslim etti ve kimse “bende çalışıyordu” demedi."
     ],
     "quiet": "Sen yokken ofis sessizdi, kedi {k} kez klavyeye yattı.",
     "earned": "Kasaya giren: +{v}",
@@ -420,11 +420,11 @@
       "desc": "Vınlıyor, ısınıyor, bir şeyler çalıştırıyor.",
       "effect": "Çevresindeki masaların teslim ettiği projeler %{n} daha kazançlı."
     },
-    "area": "Parlayan karolar bonus alır."
+    "area": "Parlayan kareler bonus alır."
   },
   "stageUp": {
-    "studyo": "Kapıda adınız yazıyor. Müşteri artık ‘ekibiniz kaç kişi?’ diye sormaya çekinmiyor.",
-    "ajans": "Artık 'biz' diyorsunuz ve bunu gerçekten ciddi söylüyorsunuz.",
+    "studyo": "Kapıda adınız yazıyor. Müşteri artık “ekibiniz kaç kişi?” diye sormaya çekinmiyor.",
+    "ajans": "Artık “biz” diyorsunuz ve bunu gerçekten ciddi söylüyorsunuz.",
     "share": "Paylaş",
     "ok": "Harika"
   },
@@ -469,5 +469,11 @@
       "offline": "İnternet bağlantısı yok. Çevrimiçi olunca tekrar dene.",
       "failed": "Takma ad kaydedilemedi. Biraz sonra tekrar dene."
     }
+  },
+  "video": {
+    "s1": "Bir laptop ve bir demlik çayla başladık.",
+    "s2": "Şimdi “biz” diyoruz.",
+    "s3": "Kahveyi nereye koyduğun önemli.",
+    "s4": "Kodhane: Açık Ofis. Tarayıcıda ve telefonda oyna."
   }
 }

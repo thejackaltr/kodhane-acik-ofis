@@ -247,7 +247,7 @@ test('desk cost: unchanged from v1 for the first 16 desks, then gentler growth',
   const s = E.newState(T0, 1);
   for (let n = 1; n <= 16; n++) { s.desks.length = n; assert.equal(E.deskCost(s), Math.round(30 * 1.45 ** (n - 1))); }
   s.desks.length = 20;
-  assert.equal(E.deskCost(s), Math.round(30 * 1.45 ** 15 * 1.3 ** 4));
+  assert.equal(E.deskCost(s), Math.round(30 * 1.45 ** 15 * CFG.deskCostGrowthLate ** 4)); assert.equal(CFG.deskCostGrowthLate, 1.36);
 });
 
 // ------------------------------------------------------------------ server plausibility mirror
@@ -272,11 +272,11 @@ test("Yazı's copy is used verbatim", () => {
     ['Ofis bitkisi', 'Kimse sulamıyor ama hâlâ yaşıyor.', 'Geniş bir alandaki masalar %8 daha hızlı.']);
   assert.deepEqual([I.t('items.sunucu.name'), I.t('items.sunucu.desc'), I.t('items.sunucu.effect', { n: 25 })],
     ['Sunucu rafı', 'Vınlıyor, ısınıyor, bir şeyler çalıştırıyor.', 'Çevresindeki masaların teslim ettiği projeler %25 daha kazançlı.']);
-  assert.equal(I.t('items.area'), 'Parlayan karolar bonus alır.');
+  assert.equal(I.t('items.area'), 'Parlayan kareler bonus alır.');
   assert.equal(I.t('tutorial.pm'), 'Proje Yöneticisini masaların ortasına koy, yanındaki herkes hızlanır.');
   assert.deepEqual(tr.bubbles.pm, ['Bunu bir toplantıda konuşalım.', 'Takvime ekledim.', 'Hangi sprintteyiz?']);
   for (const b of tr.bubbles.pm) assert.ok(b.split(/\s+/).length <= 5);
-  assert.equal(I.t('stageUp.ajans'), "Artık 'biz' diyorsunuz ve bunu gerçekten ciddi söylüyorsunuz.");
+  assert.equal(I.t('stageUp.ajans'), 'Artık “biz” diyorsunuz ve bunu gerçekten ciddi söylüyorsunuz.');
   for (const st of STAGES.slice(1)) assert.ok(tr.stageUp[st.id], 'stageUp.' + st.id);
   for (const k of ['share', 'ok']) assert.ok(tr.stageUp[k]);
   for (const id of ITEM_ORDER) assert.ok(tr.items[id].name && tr.items[id].desc && tr.items[id].effect.includes('%{n}'));
@@ -302,4 +302,22 @@ test('leaderboard helpers: nickname rules = Kodhane, server errors, view with pi
   assert.equal(v.meStatus, 'pending'); assert.equal(v.me, null);
   assert.equal(LB.buildView([]).empty, true);
   assert.equal(LB.stageName(2), tr.stages.ajans); assert.equal(LB.rankBadge(4), '#4');
+});
+
+// v2.0.1: Yazı's fixes, quotes, promo video keys, {s} from the event config
+test('v2.0.1 copy: viral/kedi texts, {s} filled from EVENTS, typographic quotes, video.* keys', () => {
+  assert.equal(I.t('events.viral.text'), 'Paylaşımın viral oldu!');
+  assert.equal(I.t('events.viral.b'), 'Hemen kazanca çevir');
+  assert.equal(I.t('events.kedi.ra'), 'Commit geri alındı, kedi başka bir klavyeye geçti.');
+  const s = studio(); s.events.pending = 'viral'; const r = EV.applyChoice(s, 'a');
+  assert.equal(r.buffSec, EVENTS.viral.a.buff.sec);
+  assert.equal(I.t('events.viral.ra', { s: r.buffSec }), 'Herkes kod yazıyor: ' + EVENTS.viral.a.buff.sec + ' sn boyunca ekip daha hızlı!');
+  const b = studio(); b.events.pending = 'viral'; const m0 = b.money; const rb = EV.applyChoice(b, 'b');
+  assert.ok(rb.cash >= 0 && b.money >= m0 && !rb.buffSec, 'viral b = instant cash (30% of the running project pay), no requests/offers');
+  assert.deepEqual([I.t('video.s1'), I.t('video.s2'), I.t('video.s3'), I.t('video.s4')],
+    ['Bir laptop ve bir demlik çayla başladık.', 'Şimdi “biz” diyoruz.', 'Kahveyi nereye koyduğun önemli.', 'Kodhane: Açık Ofis. Tarayıcıda ve telefonda oyna.']);
+  const bad = [];
+  (function walk(o, p) { for (const [k, v] of Object.entries(o)) { const q = p ? p + '.' + k : k; if (typeof v === 'string') { if (/[‘’"„«»]|(^|[\s(])'[^']+'/.test(v)) bad.push(q); } else if (v && typeof v === 'object') walk(v, q); } })(tr, '');
+  assert.deepEqual(bad, [], 'quotes are “ ” and the apostrophe is a straight \'');
+  for (const k of ['deskCostGrowth', 'deskCostGrowthFrom', 'deskCostGrowthLate']) assert.equal(typeof CFG[k], 'number', 'CFG.' + k);
 });
